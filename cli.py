@@ -119,11 +119,7 @@ def run_compliance(args):
 
 
 def main() -> None:
-    class custom_formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=custom_formatter,
-                                     description='''\033[1;33m{}\033[0m'''.format(logo))
+    parser = argparse.ArgumentParser(description='''\033[1;33m{}\033[0m'''.format(logo))
 
     # Actions
     p_action = parser.add_subparsers(dest='action', help='Available commands')

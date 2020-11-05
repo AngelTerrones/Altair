@@ -17,7 +17,8 @@ Config file: {configfile}
 \033[0;32mBuild parameters\033[0;0m'''
 
 current_path = os.path.dirname(os.path.abspath(__file__))
-cpu_variants = ['minimal', 'lite', 'standard', 'custom']
+cpu_variants = [os.path.splitext(f)[0] for f in os.listdir(current_path) if f.endswith('.yml')]
+cpu_variants.append('custom')
 config_files = {variant: f'{current_path}/{variant}.yml' for variant in cpu_variants}
 
 

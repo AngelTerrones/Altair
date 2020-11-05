@@ -9,6 +9,7 @@
         enable_user_mode: False,
     },
     trigger: {
-        enable: False
+        enable: True,
+        ntriggers: 4
     },
 }

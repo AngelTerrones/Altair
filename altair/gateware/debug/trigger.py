@@ -77,12 +77,6 @@ class TriggerModule(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        # --------------------------------------------------------------------------------
-        # Read/write behavior for all registers in this module
-        # for register in [self.tselect]:
-        #     with m.If(register.update):
-        #         m.d.sync += register.read.eq(register.write)
-
         triggers      = [Record.like(self.tdata1.read) for _ in range(self.ntriggers)]
         triggers_data = [Record.like(self.tdata2.read) for _ in range(self.ntriggers)]
 

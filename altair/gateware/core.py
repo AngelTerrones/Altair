@@ -14,6 +14,7 @@ from altair.gateware.decoder import DecoderUnit
 from altair.gateware.exception import ExceptionUnit
 from altair.gateware.divider import Divider
 from altair.gateware.multiplier import Multiplier
+from altair.gateware.debug.trigger import TriggerModule
 
 
 class Altair(Elaboratable):
@@ -23,7 +24,10 @@ class Altair(Elaboratable):
                  # ISA
                  isa_enable_rv32m: bool = False,
                  isa_enable_extra_csr: bool = False,
-                 isa_enable_user_mode: bool = False
+                 isa_enable_user_mode: bool = False,
+                 # Debug
+                 trigger_enable: bool = False,
+                 trigger_ntriggers: int = 4
                  ) -> None:
         # ----------------------------------------------------------------------
         # configuration
@@ -31,6 +35,8 @@ class Altair(Elaboratable):
         self.enable_rv32m      = isa_enable_rv32m
         self.enable_extra_csr  = isa_enable_extra_csr
         self.enable_user_mode  = isa_enable_user_mode
+        self.enable_trigger    = trigger_enable
+        self.trigger_ntriggers = trigger_ntriggers
         # dicts
         self.exception_unit_kw = dict(enable_rv32m=self.enable_rv32m,
                                       enable_extra_csr=self.enable_extra_csr,
@@ -126,6 +132,16 @@ class Altair(Elaboratable):
                 div_result.eq(0x0000beef),
                 mult_ack.eq(0),
                 div_ack.eq(0)
+            ]
+
+        if self.enable_trigger:
+            trigger = m.submodules.trigger = TriggerModule(privmode=exceptunit.m_privmode,
+                                                           ntriggers=self.trigger_ntriggers,
+                                                           csrf=csr,
+                                                           enable_user_mode=self.enable_user_mode)
+            m.d.comb += [
+                trigger.x_pc.eq(pc),
+                trigger.x_bus_addr.eq(add_out)
             ]
 
         # Port
@@ -269,6 +285,8 @@ class Altair(Elaboratable):
                     m.next = 'TRAP'
             with m.State('EXECUTE'):
                 m.d.comb += debug_state.eq(self.str2value('EXECUTE'))
+                if self.enable_trigger:
+                    m.d.comb += trigger.x_valid.eq(1)
 
                 with m.If(exceptunit.m_interrupt):
                     m.d.sync += [
@@ -276,6 +294,15 @@ class Altair(Elaboratable):
                         exceptunit.edata.eq(instruction)
                     ]
                     m.next = 'TRAP'
+                if self.enable_trigger:
+                    with m.Elif(trigger.trap):
+                        m.d.sync += [
+                            exceptunit.enable.eq(1),
+                            exceptunit.edata.eq(pc),
+                            exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
+                            exceptunit.m_exception.eq(1)
+                        ]
+                        m.next = 'TRAP'
                 with m.Else():
                     with m.If(decoder.is_shift | decoder.use_alu):
                         m.next = 'COMMIT'
@@ -312,12 +339,21 @@ class Altair(Elaboratable):
             with m.State('MEMLS'):
                 m.d.comb += debug_state.eq(self.str2value('MEMLS'))
 
+                valid = 1
+                if self.enable_trigger:
+                    valid = valid & ~trigger.trap
+                    m.d.comb += [
+                        trigger.x_valid.eq(1),
+                        trigger.x_load.eq(decoder.is_ld),
+                        trigger.x_store.eq(decoder.is_st),
+                    ]
+
                 # connect LSU
                 m.d.comb += [
                     lsu.address.eq(add_out),
                     lsu.store_data.eq(gprf_rp2.data),
-                    lsu.load.eq(decoder.is_ld),
-                    lsu.store.eq(decoder.is_st),
+                    lsu.load.eq(decoder.is_ld & valid),
+                    lsu.store.eq(decoder.is_st & valid),
                     lsu.op.eq(decoder.funct3)
                 ]
 
@@ -341,6 +377,16 @@ class Altair(Elaboratable):
                         m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
 
                     m.next = 'TRAP'
+
+                if self.enable_trigger:
+                    with m.If(trigger.trap):
+                        m.d.sync += [
+                            exceptunit.enable.eq(1),
+                            exceptunit.edata.eq(pc),
+                            exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
+                            exceptunit.m_exception.eq(1)
+                        ]
+                        m.next = 'TRAP'
             with m.State('CSR'):
                 m.d.comb += debug_state.eq(self.str2value('CSR'))
                 # CSR

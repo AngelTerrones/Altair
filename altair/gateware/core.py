@@ -310,11 +310,10 @@ class Altair(Elaboratable):
                         m.d.comb += multdiv.eq(1)
                         with m.If(mult_ack | div_ack):
                             m.next = 'COMMIT'
-                    with m.Elif(decoder.inst_fence | decoder.inst_fencei):
+                    with m.Elif(decoder.inst_fence | decoder.inst_fencei | decoder.inst_wfi):
                         m.d.sync += pc.eq(pc4)
-                        m.next = 'FETCH'
-                    with m.Elif(decoder.inst_wfi):
-                        m.d.sync += pc.eq(pc4)
+                        if self.enable_extra_csr:
+                            m.d.comb += exceptunit.w_retire.eq(1)
                         m.next = 'FETCH'
                     with m.Elif(decoder.is_ld | decoder.is_st):
                         m.next = 'MEMLS'
@@ -325,7 +324,8 @@ class Altair(Elaboratable):
                             exceptunit.enable.eq(1),
                             exceptunit.edata.eq(instruction),
                             exceptunit.ecode.eq(ExceptionCause.E_ILLEGAL_INST),
-                            exceptunit.m_exception.eq(1)
+                            exceptunit.m_exception.eq(~decoder.inst_mret),
+                            exceptunit.m_mret.eq(decoder.inst_mret)
                         ]
                         with m.If(decoder.inst_xcall):
                             m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_ECALL_FROM_M)  # check priviledge mode...
@@ -390,7 +390,6 @@ class Altair(Elaboratable):
             with m.State('CSR'):
                 m.d.comb += debug_state.eq(self.str2value('CSR'))
                 # CSR
-
                 m.d.comb += [
                     csr.port.addr.eq(decoder.csr_addr),
                     csr.port.dat_w.eq(csr_wdata),
@@ -458,6 +457,9 @@ class Altair(Elaboratable):
                     ]
 
                     m.next = 'TRAP'
+                if self.enable_extra_csr:
+                    with m.Else():
+                        m.d.comb += exceptunit.w_retire.eq(1)
             with m.State('TRAP'):
                 m.d.comb += debug_state.eq(self.str2value('TRAP'))
 
@@ -471,7 +473,8 @@ class Altair(Elaboratable):
                     exceptunit.m_mret.eq(0),
                     exceptunit.m_exception.eq(0)
                 ]
-
+                if self.enable_extra_csr:
+                    m.d.comb += exceptunit.w_retire.eq(1)
                 m.next = 'FETCH'
         # ----------------------------------------------------------------------
         # New PC

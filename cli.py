@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import re
 import os
 import glob
 import sys
 import argparse
 import subprocess
+from threading import Thread
 from subprocess import CalledProcessError
 from nmigen.back import verilog
 from nmigen.hdl.ir import Fragment
@@ -53,7 +55,7 @@ def generate_cpu_verilog(args):
 
 
 def build_testbench(args):
-    for variant in args.variant:
+    def build_threaded(variant, args):
         path = f'build/{variant}'
 
         # check if the testbench has been built
@@ -82,6 +84,16 @@ def build_testbench(args):
         os.environ['BCONFIG'] = configfile
         subprocess.check_call(f'make -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
 
+    # build using threads :D
+    threads = []
+    for variant in args.variant:
+        thread = Thread(target=build_threaded, args=(variant, args))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
 
 def run_compliance(args):
     # build the testbench
@@ -95,27 +107,38 @@ def run_compliance(args):
 
     variant_msg = []
     for variant in args.variant:
+        print('------------------------------------------------------------')
+        print(f'Running tests for {variant} configuration:\n')
+
         os.environ['TARGET_FOLDER'] = os.path.abspath(f'build/{variant}')
         isa_msg = []
         for isa in args.isa:
             try:
-                subprocess.check_call(f'make -C {args.rvc} variant RISCV_TARGET=algol RISCV_DEVICE=rv32i RISCV_ISA={isa}',
-                                      shell=True, stderr=subprocess.STDOUT)
+                cmd = f'make -C {args.rvc} variant RISCV_TARGET=algol RISCV_DEVICE=rv32i RISCV_ISA={isa}'
+                output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
                 isa_msg.append(f'{isa} test ended sucessfully.')
             except CalledProcessError as error:
-                print(f"Error: {error}", file=sys.stderr)
-                isa_msg.append(f'{isa} test with errors.')
+                output = error.stdout
+                isa_msg.append(f'{isa} test ended with errors.')
+
+            result = re.search(f'files \.\.\. \n(.*)\nmake: Leaving', output, re.DOTALL)  # noqa
+            if result:
+                print(f'* {isa}:\n\n{result.group(1)}\n')
+
+            # write log file
+            logfile = os.path.abspath(f'build/{variant}') + f'/{isa}.log'
+            with open(logfile, 'w') as f:
+                f.write(output)
 
         variant_msg.append(isa_msg)
 
-    print('\n------------------------------------------------------------')
-    print('Results:')
-    print('------------------------------------------------------------')
+    print('============================================================')
+    print('Result:\n')
     for variant, msg in zip(args.variant, variant_msg):
         print(f'{variant} configuration:')
         for tmp in msg:
             print(f'\t{tmp}')
-    print('------------------------------------------------------------')
+    print('============================================================')
 
 
 def main() -> None:

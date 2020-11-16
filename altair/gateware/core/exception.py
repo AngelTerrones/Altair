@@ -4,11 +4,11 @@ from nmigen import Signal
 from nmigen import Elaboratable
 from nmigen.lib.coding import PriorityEncoder
 from nmigen.build import Platform
-from altair.gateware.csr import AutoCSR
-from altair.gateware.csr import CSRFile
-from altair.gateware.isa import CSRIndex
-from altair.gateware.isa import ExceptionCause
-from altair.gateware.isa import PrivMode
+from altair.gateware.core.csr import AutoCSR
+from altair.gateware.core.csr import CSRFile
+from altair.gateware.core.isa import CSRIndex
+from altair.gateware.core.isa import ExceptionCause
+from altair.gateware.core.isa import PrivMode
 
 
 class ExceptionUnit(Elaboratable, AutoCSR):
@@ -17,13 +17,13 @@ class ExceptionUnit(Elaboratable, AutoCSR):
                  enable_user_mode: bool = False,
                  enable_extra_csr: bool = False,
                  enable_rv32m: bool = False,
-                 core_reset_address: int = 0x8000_0000
+                 reset_address: int = 0x8000_0000
                  ) -> None:
         # ----------------------------------------------------------------------
-        self.enable_user_mode   = enable_user_mode
-        self.enable_extra_csr   = enable_extra_csr
-        self.enable_rv32m       = enable_rv32m
-        self.core_reset_address = core_reset_address
+        self.enable_user_mode = enable_user_mode
+        self.enable_extra_csr = enable_extra_csr
+        self.enable_rv32m     = enable_rv32m
+        self.reset_address    = reset_address
         # ----------------------------------------------------------------------
         if self.enable_extra_csr:
             self.misa      = csrf.add_register('misa', CSRIndex.MISA)
@@ -69,7 +69,7 @@ class ExceptionUnit(Elaboratable, AutoCSR):
         # --------------------------------------------------------------------------------
         # Set MTVEC to the RESET address, to avoid getting lost in limbo if there's an exception
         # before the boot code sets this to a valid value
-        self.mtvec.read.base.reset = self.core_reset_address >> 2
+        self.mtvec.read.base.reset = self.reset_address >> 2
 
         # MISA reset value
         if self.enable_extra_csr:

@@ -45,40 +45,42 @@ function [31:0] wb_next_addr;
 endfunction
 
 module ram #(
-             parameter ADDR_WIDTH = 22,
+             parameter ADDR_WIDTH = 20,
              parameter BASE_ADDR  = 32'h0000_0000
              )(
-               input wire        clk,
-               input wire        rst,
+               input wire clk,
+               input wire rst,
                // Data
-               input wire [31:0] dwbs_addr,
-               input wire [31:0] dwbs_dat_w,
-               input wire [ 3:0] dwbs_sel,
-               input wire        dwbs_cyc,
-               input wire        dwbs_stb,
-               input wire [2:0]  dwbs_cti,
-               input wire [1:0]  dwbs_bte,
-               input wire        dwbs_we,
-               output reg [31:0] dwbs_dat_r,
-               output reg        dwbs_ack
+               input wire [ADDR_WIDTH - 1:0] dwbs_addr,
+               input wire [31:0]             dwbs_dat_w,
+               input wire [ 3:0]             dwbs_sel,
+               input wire                    dwbs_cyc,
+               input wire                    dwbs_stb,
+               input wire [2:0]              dwbs_cti,
+               input wire [1:0]              dwbs_bte,
+               input wire                    dwbs_we,
+               output reg [31:0]             dwbs_dat_r,
+               output reg                    dwbs_ack
                );
     //--------------------------------------------------------------------------
-    localparam BYTES = 2**ADDR_WIDTH;
+    localparam BYTE_ADDR_WIDTH = ADDR_WIDTH + 2;
+    localparam BYTES           = 2**(BYTE_ADDR_WIDTH);
     //
-    byte                    mem[0:BYTES - 1]; // FFS, this MUST BE BYTE, FOR DPI.
-    wire [31:0] d_addr;
-    wire        d_valid;
-    reg         d_valid_r;
-    wire        d_last;
-    wire [31:0] d_nxt_addr;
-    wire [31:0] _d_addr;
+    byte  mem[0:BYTES - 1]; // FFS, this MUST BE BYTE, FOR DPI.
+
+    wire [ADDR_WIDTH + 2 - 1:0] _d_addr;
+    wire [ADDR_WIDTH + 2 - 1:0] d_addr;
+    wire [ADDR_WIDTH + 2 - 1:0] d_nxt_addr;
+    wire                        d_valid;
+    reg                         d_valid_r;
+    wire                        d_last;
 
     // read/write data
-    assign _d_addr    = {{(32 - ADDR_WIDTH){1'b0}}, dwbs_addr[ADDR_WIDTH - 1:2], 2'b0};
-    assign d_last     = is_last(dwbs_cti);
+    assign _d_addr    = {dwbs_addr, 2'b0};  // extend the address
     assign d_nxt_addr = wb_next_addr(_d_addr, dwbs_cti, dwbs_bte, 32);
     assign d_addr     = ((d_valid & !d_valid_r) | d_last) ? _d_addr : d_nxt_addr;
-    assign d_valid    = dwbs_cyc && dwbs_stb && (dwbs_addr[31:ADDR_WIDTH] == BASE_ADDR[31:ADDR_WIDTH]);
+    assign d_last     = is_last(dwbs_cti);
+    assign d_valid    = dwbs_cyc && dwbs_stb;
 
     always @(posedge clk) begin
         dwbs_dat_r <= 32'hx;
@@ -113,41 +115,41 @@ module ram #(
     import "DPI-C" function void ram_c_dpi_load(input byte mem[], input string filename);
     //
     function int ram_v_dpi_read_word(int address);
-        if (address[31:ADDR_WIDTH] != BASE_ADDR[31:ADDR_WIDTH]) begin
+        if (address[31:BYTE_ADDR_WIDTH] != BASE_ADDR[31:BYTE_ADDR_WIDTH]) begin
             $display("[RAM read word] Bad address: %h. Abort.\n", address);
             $finish;
         end
-        return {mem[address[ADDR_WIDTH-1:0] + 3],
-                mem[address[ADDR_WIDTH-1:0] + 2],
-                mem[address[ADDR_WIDTH-1:0] + 1],
-                mem[address[ADDR_WIDTH-1:0] + 0]};
+        return {mem[address[BYTE_ADDR_WIDTH-1:0] + 3],
+                mem[address[BYTE_ADDR_WIDTH-1:0] + 2],
+                mem[address[BYTE_ADDR_WIDTH-1:0] + 1],
+                mem[address[BYTE_ADDR_WIDTH-1:0] + 0]};
     endfunction
     //
     function byte ram_v_dpi_read_byte(int address);
-        if (address[31:ADDR_WIDTH] != BASE_ADDR[31:ADDR_WIDTH]) begin
+        if (address[31:BYTE_ADDR_WIDTH] != BASE_ADDR[31:BYTE_ADDR_WIDTH]) begin
             $display("[RAM read byte] Bad address: %h. Abort.\n", address);
             $finish;
         end
-        return mem[address[ADDR_WIDTH-1:0]];
+        return mem[address[BYTE_ADDR_WIDTH-1:0]];
     endfunction
     //
     function void ram_v_dpi_write_word(int address, int data);
-        if (address[31:ADDR_WIDTH] != BASE_ADDR[31:ADDR_WIDTH]) begin
+        if (address[31:BYTE_ADDR_WIDTH] != BASE_ADDR[31:BYTE_ADDR_WIDTH]) begin
             $display("[RAM write word] Bad address: %h. Abort.\n", address);
             $finish;
         end
-        mem[address[ADDR_WIDTH-1:0] + 0] = data[7:0];
-        mem[address[ADDR_WIDTH-1:0] + 1] = data[15:8];
-        mem[address[ADDR_WIDTH-1:0] + 2] = data[23:16];
-        mem[address[ADDR_WIDTH-1:0] + 3] = data[31:24];
+        mem[address[BYTE_ADDR_WIDTH-1:0] + 0] = data[7:0];
+        mem[address[BYTE_ADDR_WIDTH-1:0] + 1] = data[15:8];
+        mem[address[BYTE_ADDR_WIDTH-1:0] + 2] = data[23:16];
+        mem[address[BYTE_ADDR_WIDTH-1:0] + 3] = data[31:24];
     endfunction
     //
     function void ram_v_dpi_write_byte(int address, byte data);
-        if (address[31:ADDR_WIDTH] != BASE_ADDR[31:ADDR_WIDTH]) begin
+        if (address[31:BYTE_ADDR_WIDTH] != BASE_ADDR[31:BYTE_ADDR_WIDTH]) begin
             $display("[RAM write byte] Bad address: %h. Abort.\n", address);
             $finish;
         end
-        mem[address[ADDR_WIDTH-1:0]] = data;
+        mem[address[BYTE_ADDR_WIDTH-1:0]] = data;
     endfunction
     //
     function void ram_v_dpi_load(string filename);

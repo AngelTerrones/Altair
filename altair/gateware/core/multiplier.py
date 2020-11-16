@@ -6,7 +6,7 @@ from nmigen import Signal
 from nmigen import Elaboratable
 from nmigen import signed
 from nmigen.build import Platform
-from altair.gateware.isa import Funct3
+from altair.gateware.core.isa import Funct3
 
 
 class Multiplier(Elaboratable):

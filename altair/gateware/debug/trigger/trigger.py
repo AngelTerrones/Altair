@@ -3,9 +3,9 @@ from nmigen import Module
 from nmigen import Record
 from nmigen import Elaboratable
 from nmigen.build import Platform
-from altair.gateware.csr import CSRFile
-from altair.gateware.isa import CSRIndex
-from altair.gateware.isa import PrivMode
+from altair.gateware.core.csr import CSRFile
+from altair.gateware.core.isa import CSRIndex
+from altair.gateware.core.isa import PrivMode
 
 
 class TriggerAction:

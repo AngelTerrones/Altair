@@ -5,7 +5,7 @@ from nmigen import Module
 from nmigen import Elaboratable
 from nmigen.build import Platform
 from nmigen_soc.wishbone.bus import Interface
-from altair.gateware.isa import Funct3
+from altair.gateware.core.isa import Funct3
 
 
 class _DataFormat(Elaboratable):
@@ -73,7 +73,7 @@ class _DataFormat(Elaboratable):
 
 class LoadStoreUnit(Elaboratable):
     def __init__(self) -> None:
-        self.mport      = Interface(addr_width=32, data_width=32, granularity=8, features=['err'], name='mport')
+        self.mport      = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='mport')
         self.address    = Signal(32)
         self.store_data = Signal(32)
         self.load_data  = Signal(32)
@@ -98,7 +98,7 @@ class LoadStoreUnit(Elaboratable):
         ]
 
         m.d.comb += [
-            self.mport.adr.eq(self.address),
+            self.mport.adr.eq(self.address[2:]),
             self.mport.dat_w.eq(dataformat.data_write),
             self.mport.sel.eq(dataformat.byte_sel),
             self.mport.we.eq(self.store),

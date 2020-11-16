@@ -10,7 +10,7 @@ from threading import Thread
 from subprocess import CalledProcessError
 from nmigen.back import verilog
 from nmigen.hdl.ir import Fragment
-from altair.gateware.core import Altair
+from altair.gateware.core import CoreGenerator
 from altair.config.config import logo
 from altair.config.config import load_config
 from altair.config.config import cpu_variants
@@ -35,8 +35,10 @@ def need_rebuild(bfolder: str):
 
 
 def CPU_to_verilog(core_config: dict, vfile: str):
-    cpu = Altair(**core_config)
-    ports = cpu.port_list()
+    core_args     = core_config['core']
+    platform_args = core_config['platform']
+    cpu           = CoreGenerator(**core_args, **platform_args)
+    ports         = cpu.port_list()
 
     # generate the verilog file
     fragment = Fragment.get(cpu, None)
@@ -68,7 +70,10 @@ def build_testbench(args):
         os.makedirs(path, exist_ok=True)
 
         # generate verilog
-        core_config = load_config(variant, args.config, False)
+        try:
+            core_config = load_config(variant, args.config, args.verbose)
+        except AttributeError:
+            core_config = load_config(variant, args.config, True)
         CPU_to_verilog(core_config, f'{path}/altair_core.v')
 
         # generate testbench and makefile
@@ -93,6 +98,7 @@ def build_testbench(args):
 
     for thread in threads:
         thread.join()
+    # TODO check for errors in thread
 
 
 def run_compliance(args):
@@ -164,6 +170,8 @@ def main() -> None:
                            help='CPU type')
     p_buildtb.add_argument('--config',
                            help='Configuration file for custom variants')
+    p_buildtb.add_argument('--verbose', action='store_true',
+                           help='Print the configuration file')
     # --------------------------------------------------------------------------
     # run compliance test
     p_compliance = p_action.add_parser('compliance', help='Run the RISC-V compliance test')

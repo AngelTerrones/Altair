@@ -9,7 +9,7 @@ module interrupt(
         input wire clk,
         input wire rst,
         // bus
-        input wire [31:0] int_addr,
+        input wire [ 5:0] int_addr,
         input wire [31:0] int_dat_w,
         input wire [ 3:0] int_sel,
         input wire        int_cyc,
@@ -26,9 +26,9 @@ module interrupt(
         output wire software_interrupt
         );
     //--------------------------------------------------------------------------
-    reg soft_int; // @BASEADDRESS + 0
-    reg timer_int; // @BASEADDRESS + 4
-    reg ext_int;  // @BASEADDRESS + 8
+    reg soft_int;  // @BASEADDRESS + 0
+    reg timer_int; // @BASEADDRESS + 1
+    reg ext_int;   // @BASEADDRESS + 2
 
     // reg to output
     assign external_interrupt = ext_int;
@@ -48,10 +48,10 @@ module interrupt(
 
     // read logic
     always @(posedge clk or posedge rst) begin
-        case (int_addr[3:0])
-            4'b0000: int_dat_r <= soft_int;
-            4'b0100: int_dat_r <= timer_int;
-            4'b1000: int_dat_r <= ext_int;
+        case (int_addr[1:0])
+            2'b00: int_dat_r <= {31'b0, soft_int};
+            2'b01: int_dat_r <= {31'b0, timer_int};
+            2'b10: int_dat_r <= {31'b0, ext_int};
             default: int_dat_r <= 32'bx;
         endcase
     end
@@ -60,10 +60,10 @@ module interrupt(
     always @(posedge clk or posedge rst) begin
         if (int_ack && (&int_sel)) begin
             // verilator lint_off CASEINCOMPLETE
-            case (int_addr[3:0])
-                4'b0000:  soft_int  <= int_dat_w;
-                4'b0100:  timer_int <= int_dat_w;
-                4'b1000:  ext_int   <= int_dat_w;
+            case (int_addr[1:0])
+                2'b00:  soft_int  <= int_dat_w[0];
+                2'b01:  timer_int <= int_dat_w[0];
+                2'b10:  ext_int   <= int_dat_w[0];
             endcase
             // verilator lint_on CASEINCOMPLETE
         end
@@ -76,6 +76,6 @@ module interrupt(
 
     //--------------------------------------------------------------------------
     // unused
-    wire _unused = |{int_stb, int_cti, int_addr[31:4]};
+    wire _unused = |{int_stb, int_cti};
     //--------------------------------------------------------------------------
 endmodule

@@ -20,6 +20,25 @@ cpu_variants.append('custom')
 config_files = {variant: f'{current_path}/{variant}.yml' for variant in cpu_variants}
 
 
+def print_dict(dict_: dict, level: int = 0):
+    indent = ''
+    if level != 0:
+        indent = '{:>{}}'.format('- ', 4 * level)
+
+    for key, item in dict_.items():
+        if isinstance(item, dict):
+            print(f'{indent}{key}:')
+            print_dict(item, level + 1)
+        else:
+            if isinstance(item, list):
+                print(f'{indent}{key}: [start_addr: {item[0]:#010x}, addr_width: {item[1]}]')
+            else:
+                if 'address' in key:
+                    print(f'{indent}{key}: {item:#010x}')
+                else:
+                    print(f'{indent}{key}: {item}')
+
+
 def load_config(variant: str, configfile: str, verbose: bool) -> Dict:
     if variant == 'custom':
         if configfile is None:
@@ -28,27 +47,10 @@ def load_config(variant: str, configfile: str, verbose: bool) -> Dict:
         configfile = config_files[variant]
 
     core_config = yaml.load(open(configfile).read(), Loader=yaml.Loader)
-    config      = {}
-
-    for key, item in core_config.items():
-        if isinstance(item, dict):
-            for k2, i2 in item.items():
-                config['{}_{}'.format(key, k2)] = i2
-        else:
-            config[key] = item
 
     if verbose:
         print(header.format(logo=logo, variant=variant, configfile=configfile))
-        for key, item in core_config.items():
-            if isinstance(item, dict):
-                print(f'{key}:')
-                for k2, i2 in item.items():
-                    if k2 in ('reset_address', 'start', 'end'):
-                        print(f'- {k2}: {hex(i2)}')
-                    else:
-                        print(f'- {k2}: {i2}')
-            else:
-                print(f'{key}: {item}')
+        print_dict(core_config)
         print('--------------------------------------------------')
 
-    return config
+    return core_config

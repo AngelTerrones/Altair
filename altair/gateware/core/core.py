@@ -6,50 +6,55 @@ from nmigen import Elaboratable
 from nmigen.build import Platform
 from nmigen_soc.wishbone.bus import Interface
 from typing import List
-from altair.gateware.isa import Funct3
-from altair.gateware.isa import ExceptionCause
-from altair.gateware.csr import CSRFile
-from altair.gateware.lsu import LoadStoreUnit
-from altair.gateware.decoder import DecoderUnit
-from altair.gateware.exception import ExceptionUnit
-from altair.gateware.divider import Divider
-from altair.gateware.multiplier import Multiplier
+from altair.gateware.core.isa import Funct3
+from altair.gateware.core.isa import ExceptionCause
+from altair.gateware.core.csr import CSRFile
+from altair.gateware.core.lsu import LoadStoreUnit
+from altair.gateware.core.decoder import DecoderUnit
+from altair.gateware.core.exception import ExceptionUnit
+from altair.gateware.core.divider import Divider
+from altair.gateware.core.multiplier import Multiplier
 from altair.gateware.debug.trigger import TriggerModule
 
 
-class Altair(Elaboratable):
+class Core(Elaboratable):
     def __init__(self,
-                 # Core
-                 core_reset_address: int = 0x8000_0000,
+                 # Reset
+                 reset_address: int = 0x8000_0000,
                  # ISA
-                 isa_enable_rv32m: bool = False,
-                 isa_enable_extra_csr: bool = False,
-                 isa_enable_user_mode: bool = False,
+                 enable_rv32m: bool = False,
+                 enable_extra_csr: bool = False,
+                 enable_user_mode: bool = False,
+                 # Trigger
+                 enable_triggers: bool = False,
+                 ntriggers: int = 4,
                  # Debug
-                 trigger_enable: bool = False,
-                 trigger_ntriggers: int = 4
+                 debug_enable: bool = False,
+                 # extra args
+                 **kwargs,
                  ) -> None:
         # ----------------------------------------------------------------------
         # configuration
-        self.reset_address     = core_reset_address
-        self.enable_rv32m      = isa_enable_rv32m
-        self.enable_extra_csr  = isa_enable_extra_csr
-        self.enable_user_mode  = isa_enable_user_mode
-        self.enable_trigger    = trigger_enable
-        self.trigger_ntriggers = trigger_ntriggers
+        self.reset_address     = reset_address
+        self.enable_rv32m      = enable_rv32m
+        self.enable_extra_csr  = enable_extra_csr
+        self.enable_user_mode  = enable_user_mode
+        self.enable_trigger    = enable_triggers
+        self.trigger_ntriggers = ntriggers
+        self.debug_enable      = debug_enable
         # dicts
         self.exception_unit_kw = dict(enable_rv32m=self.enable_rv32m,
                                       enable_extra_csr=self.enable_extra_csr,
                                       enable_user_mode=self.enable_user_mode,
-                                      core_reset_address=self.reset_address)
+                                      reset_address=self.reset_address)
         # IO
-        self.mport = Interface(addr_width=32, data_width=32, granularity=8, features=['err'], name='mport')
+        self.wbport             = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='wbport')
         self.external_interrupt = Signal()  # input
         self.timer_interrupt    = Signal()  # input
         self.software_interrupt = Signal()  # input
 
     def port_list(self) -> List:
-        mport = [getattr(self.mport, name) for name, _, _ in self.mport.layout]
+        mport = [getattr(self.wbport, name) for name, _, _ in self.wbport.layout]
 
         return [
             *mport,
@@ -145,7 +150,7 @@ class Altair(Elaboratable):
             ]
 
         # Port
-        m.d.comb += lsu.mport.connect(self.mport)
+        m.d.comb += lsu.mport.connect(self.wbport)
 
         # ALU A
         with m.If(decoder.inst_lui):

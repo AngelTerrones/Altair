@@ -1,15 +1,21 @@
-# Bellatrix minimal configuration
 {
     core: {
         reset_address: 0x80000000,
-    },
-    isa: {
+        #ISA
         enable_rv32m: False,
         enable_extra_csr: True,
         enable_user_mode: False,
-    },
-    trigger: {
-        enable: True,
+        # Debug
+        debug_enable: True,
+        enable_triggers: True,
         ntriggers: 4
     },
+    platform: {
+        ncores: 1,
+        wbports: {
+            # address and size using byte addressing
+            mport: [0x8000_0000, 22],
+            io: [0x1000_0000, 8]
+        }
+    }
 }

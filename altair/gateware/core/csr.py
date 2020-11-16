@@ -3,21 +3,21 @@ from nmigen import Record
 from nmigen import Signal
 from nmigen import Elaboratable
 from nmigen.build import Platform
-from altair.gateware.isa import CSRAccess
-from altair.gateware.isa import PrivMode
 from typing import List, Tuple, Dict
-from altair.gateware.isa import CSRIndex
-from altair.gateware.isa import basic_rw_layout
-from altair.gateware.isa import basic_ro_layout
-from altair.gateware.isa import misa_layout
-from altair.gateware.isa import mstatus_layout
-from altair.gateware.isa import mtvec_layout
-from altair.gateware.isa import mepc_layout
-from altair.gateware.isa import mip_layout
-from altair.gateware.isa import mie_layout
-from altair.gateware.isa import mcause_layout
-from altair.gateware.isa import dcsr_layout
-from altair.gateware.isa import tdata1_layout
+from altair.gateware.core.isa import CSRAccess
+from altair.gateware.core.isa import PrivMode
+from altair.gateware.core.isa import CSRIndex
+from altair.gateware.core.isa import basic_rw_layout
+from altair.gateware.core.isa import basic_ro_layout
+from altair.gateware.core.isa import misa_layout
+from altair.gateware.core.isa import mstatus_layout
+from altair.gateware.core.isa import mtvec_layout
+from altair.gateware.core.isa import mepc_layout
+from altair.gateware.core.isa import mip_layout
+from altair.gateware.core.isa import mie_layout
+from altair.gateware.core.isa import mcause_layout
+from altair.gateware.core.isa import dcsr_layout
+from altair.gateware.core.isa import tdata1_layout
 
 # layout for CSRs:
 # (name, shape/size, access type)

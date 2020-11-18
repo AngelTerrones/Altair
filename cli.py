@@ -81,7 +81,21 @@ def build_testbench(args):
 
         # run make
         os.environ['BCONFIG'] = configfile
-        subprocess.check_call(f'make -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
+        try:
+            output = subprocess.check_output(f'make -C {path} -j$(nproc)', shell=True, text=True, stderr=subprocess.STDOUT)
+            print('--------------------------------------------------')
+            print('Build: DONE')
+            print('--------------------------------------------------')
+        except CalledProcessError as error:
+            output = error.stdout
+            print('--------------------------------------------------')
+            print('Build with errors:\n')
+            print(output)
+            print('--------------------------------------------------')
+
+        logfile = os.path.abspath(f'build/{variant}/build.log')
+        with open(logfile, 'w') as f:
+            f.write(output)
 
 
 def run_compliance(args):

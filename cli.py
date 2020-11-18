@@ -6,7 +6,6 @@ import glob
 import sys
 import argparse
 import subprocess
-from threading import Thread
 from subprocess import CalledProcessError
 from nmigen.back import verilog
 from nmigen.hdl.ir import Fragment
@@ -52,28 +51,23 @@ def CPU_to_verilog(core_config: dict, vfile: str):
 
 def generate_cpu_verilog(args):
     # load configuration
-    core_config = load_config(args.variant, args.config, args.verbose)
+    core_config = load_config(args.variant, args.config)
     CPU_to_verilog(core_config, args.filename)
 
 
 def build_testbench(args):
-    def build_threaded(variant, args):
+    for variant in args.variant:
         path = f'build/{variant}'
 
         # check if the testbench has been built
         rebuild = need_rebuild(path)
-
         if (os.path.exists(f'{path}/core.exe') and not rebuild):
             print('Testbench up-to-date. Skipping.')
             return
 
-        os.makedirs(path, exist_ok=True)
-
         # generate verilog
-        try:
-            core_config = load_config(variant, args.config, args.verbose)
-        except AttributeError:
-            core_config = load_config(variant, args.config, True)
+        os.makedirs(path, exist_ok=True)
+        core_config = load_config(variant, args.config)
         CPU_to_verilog(core_config, f'{path}/altair_core.v')
 
         # generate testbench and makefile
@@ -88,17 +82,6 @@ def build_testbench(args):
         # run make
         os.environ['BCONFIG'] = configfile
         subprocess.check_call(f'make -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
-
-    # build using threads :D
-    threads = []
-    for variant in args.variant:
-        thread = Thread(target=build_threaded, args=(variant, args))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-    # TODO check for errors in thread
 
 
 def run_compliance(args):
@@ -161,8 +144,6 @@ def main() -> None:
                                 help='CPU type')
     p_generate_cpu.add_argument('--config',
                                 help='Configuration file for custom variants')
-    p_generate_cpu.add_argument('--verbose', action='store_true',
-                                help='Print the configuration file')
     # --------------------------------------------------------------------------
     # build verilator testbench
     p_buildtb = p_action.add_parser('buildtb', help='Build the Verilator simulator')
@@ -170,8 +151,6 @@ def main() -> None:
                            help='CPU type')
     p_buildtb.add_argument('--config',
                            help='Configuration file for custom variants')
-    p_buildtb.add_argument('--verbose', action='store_true',
-                           help='Print the configuration file')
     # --------------------------------------------------------------------------
     # run compliance test
     p_compliance = p_action.add_parser('compliance', help='Run the RISC-V compliance test')

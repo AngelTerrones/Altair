@@ -39,7 +39,7 @@ def print_dict(dict_: dict, level: int = 0):
                     print(f'{indent}{key}: {item}')
 
 
-def load_config(variant: str, configfile: str, verbose: bool) -> Dict:
+def load_config(variant: str, configfile: str, verbose: bool = True) -> Dict:
     if variant == 'custom':
         if configfile is None:
             raise RuntimeError('A configuration file is needed for custom variant')

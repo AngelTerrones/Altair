@@ -120,7 +120,7 @@ def run_compliance(args):
         isa_msg = []
         for isa in args.isa:
             try:
-                cmd = f'make -C {args.rvc} variant RISCV_TARGET=algol RISCV_DEVICE=rv32i RISCV_ISA={isa}'
+                cmd = f'make -C {args.rvc} variant RISCV_TARGET=nht RISCV_DEVICE=rv32i RISCV_ISA={isa}'
                 output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
                 isa_msg.append(f'{isa} test ended sucessfully.')
             except CalledProcessError as error:

@@ -12,6 +12,14 @@ from altair.gateware.core import Core
 
 
 class CoreGenerator(Elaboratable):
+    class SlavePort:
+        def __init__(self, *, addr_start, addr_width, features, name):
+            self.interface = Interface(addr_width=addr_width - 2, data_width=32, granularity=8,
+                                       features=features, name=name)
+            self.interface.memory_map = MemoryMap(addr_width=addr_width, data_width=8)
+            self.addr_start           = addr_start
+            self.addr_width           = addr_width
+
     def __init__(self,
                  # Core
                  reset_address: int = 0x8000_0000,
@@ -37,18 +45,14 @@ class CoreGenerator(Elaboratable):
         self.ncores  = ncores
         self.wbports = wbports
         # IO
-        self.wbslaves = []
-        for name, (start, size) in self.wbports.items():
-            port = Interface(addr_width=size - 2, data_width=32, granularity=8, features=['err'], name=name)
-            port.memory_map = MemoryMap(addr_width=size, data_width=8)
-            self.wbslaves.append(port)
-
+        self.wbslaves = [CoreGenerator.SlavePort(addr_start=start, addr_width=size, features=['err'], name=name)
+                         for name, (start, size) in self.wbports.items()]
         self.external_interrupt = Signal()  # input
         self.timer_interrupt    = Signal()  # input
         self.software_interrupt = Signal()  # input
 
     def port_list(self) -> list:
-        mport = [getattr(port, name) for port in self.wbslaves for name, _, _ in port.layout]
+        mport = [getattr(port.interface, name) for port in self.wbslaves for name, _, _ in port.interface.layout]
 
         return [
             *mport,
@@ -80,48 +84,44 @@ class CoreGenerator(Elaboratable):
             # decoder
             decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])
 
-            for (start, size), slave in zip(self.wbports.values(), slaves):
-                decoder.add(slave, addr=start)
+            for slave in slaves:
+                decoder.add(slave.interface, addr=slave.addr_start)
 
             m.d.comb += masters[0].connect(decoder.bus)
         elif nmasters > 1 and nslaves == 1:
             # arbiter
             arbiter = m.submodules.arbiter = Arbiter(addr_width=30, data_width=32, granularity=8, features=['err'])
-
             for master in masters:
                 arbiter.add(master)
-
-            m.d.comb += arbiter.bus.connect(slaves[0])
+            m.d.comb += arbiter.bus.connect(slaves[0].interface)
         else:
             # crossbar
-            slave_start = [start for start, _ in self.wbports.values()]
-            slave_size  = [size for _, size in self.wbports.values()]
-
             # create the matrix
-            access      = [[Interface(addr_width=size - 2, data_width=32, granularity=8, features=['err']) for size in slave_size] for _ in enumerate(masters)]
+            access = [[Interface(addr_width=slave.addr_width - 2, data_width=32, granularity=8, features=['err']) for slave in slaves]
+                      for _ in enumerate(masters)]
             for row in access:
-                for port, size in zip(row, slave_size):
-                    port.memory_map = MemoryMap(addr_width=size, data_width=8)
+                for port, slave in zip(row, slaves):
+                    port.memory_map = slave.interface.memory_map
 
             # decode each master to access row
             for row, master in zip(access, masters):
                 decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])
                 m.submodules += decoder
 
-                for bus, start in zip(row, slave_start):
-                    decoder.add(bus, addr=start)
+                for bus, slave in zip(row, slaves):
+                    decoder.add(bus, addr=slave.addr_start)
 
                 m.d.comb += master.connect(decoder.bus)
 
             # arbitrate the column to slave
-            for column, slave, size in zip(zip(*access), slaves, slave_size):
-                arbiter = Arbiter(addr_width=size - 2, data_width=32, granularity=8, features=['err'])
+            for column, slave in zip(zip(*access), slaves):
+                arbiter = Arbiter(addr_width=slave.addr_width - 2, data_width=32, granularity=8, features=['err'])
                 m.submodules += arbiter
 
                 for bus in column:
                     arbiter.add(bus)
 
-                m.d.comb += arbiter.bus.connect(slave)
+                m.d.comb += arbiter.bus.connect(slave.interface)
 
         # ------------------------------------------------------------
         # connect the interrupt lines

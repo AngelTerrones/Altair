@@ -29,9 +29,7 @@ class Core(Elaboratable):
                  enable_triggers: bool = False,
                  ntriggers: int = 4,
                  # Debug
-                 debug_enable: bool = False,
-                 # extra args
-                 **kwargs,
+                 debug_enable: bool = False
                  ) -> None:
         # ----------------------------------------------------------------------
         # configuration

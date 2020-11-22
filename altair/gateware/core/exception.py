@@ -14,12 +14,14 @@ from altair.gateware.core.isa import PrivMode
 class ExceptionUnit(Elaboratable, AutoCSR):
     def __init__(self,
                  csrf: CSRFile,
+                 hartid: int = 0,
                  enable_user_mode: bool = False,
                  enable_extra_csr: bool = False,
                  enable_rv32m: bool = False,
                  reset_address: int = 0x8000_0000
                  ) -> None:
         # ----------------------------------------------------------------------
+        self.hartid           = hartid
         self.enable_user_mode = enable_user_mode
         self.enable_extra_csr = enable_extra_csr
         self.enable_rv32m     = enable_rv32m
@@ -80,7 +82,8 @@ class ExceptionUnit(Elaboratable, AutoCSR):
                 misa_ext |= 1 << (ord('u') - ord('a'))  # User mode enabled
 
             self.misa.read.extensions.reset = misa_ext
-            self.misa.read.mxl.reset = 0x1
+            self.misa.read.mxl.reset        = 0x1
+            self.mhartid.read.data.reset    = self.hartid
 
         if self.enable_user_mode:
             self.mstatus.read.mpp.reset = PrivMode.User

@@ -29,7 +29,9 @@ class Core(Elaboratable):
                  enable_triggers: bool = False,
                  ntriggers: int = 4,
                  # Debug
-                 debug_enable: bool = False
+                 debug_enable: bool = False,
+                 # Identification
+                 hartid: int = 0
                  ) -> None:
         # ----------------------------------------------------------------------
         # configuration
@@ -41,7 +43,8 @@ class Core(Elaboratable):
         self.trigger_ntriggers = ntriggers
         self.debug_enable      = debug_enable
         # dicts
-        self.exception_unit_kw = dict(enable_rv32m=self.enable_rv32m,
+        self.exception_unit_kw = dict(hartid=hartid,
+                                      enable_rv32m=self.enable_rv32m,
                                       enable_extra_csr=self.enable_extra_csr,
                                       enable_user_mode=self.enable_user_mode,
                                       reset_address=self.reset_address)

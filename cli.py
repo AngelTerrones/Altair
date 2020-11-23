@@ -63,7 +63,7 @@ def build_testbench(args):
         rebuild = need_rebuild(path)
         if (os.path.exists(f'{path}/core.exe') and not rebuild):
             print('Testbench up-to-date. Skipping.')
-            return
+            continue
 
         # generate verilog
         os.makedirs(path, exist_ok=True)

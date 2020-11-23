@@ -9,13 +9,15 @@ from nmigen_soc.wishbone.bus import Arbiter
 from nmigen_soc.wishbone.bus import Decoder
 from nmigen_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
+from altair.gateware.platform.coreint import CoreInterrupts
+from typing import List
 
 
 class CoreGenerator(Elaboratable):
     class SlavePort:
-        def __init__(self, *, addr_start, addr_width, features, name):
+        def __init__(self, *, addr_start: int, addr_width: int, features: List[str], ifname: str) -> None:
             self.interface = Interface(addr_width=addr_width - 2, data_width=32, granularity=8,
-                                       features=features, name=name)
+                                       features=features, name=ifname)
             self.interface.memory_map = MemoryMap(addr_width=addr_width, data_width=8)
             self.addr_start           = addr_start
             self.addr_width           = addr_width
@@ -31,7 +33,10 @@ class CoreGenerator(Elaboratable):
                  debug_enable: bool = False,
                  # SoC
                  ncores: int = 1,
-                 wbports: dict = {}
+                 coreint_address: int = 0x2000_0000,
+                 plic_address: int = 0x3000_0000,
+                 plic_nint: int = 16,
+                 external_ports: dict = {}
                  ) -> None:
         # ----------------------------------------------------------------------
         # config
@@ -42,23 +47,21 @@ class CoreGenerator(Elaboratable):
                             enable_triggers=enable_triggers,
                             ntriggers=ntriggers,
                             debug_enable=debug_enable)
-        self.ncores  = ncores
-        self.wbports = wbports
+        self._ncores       = ncores
+        self._coreint_addr = coreint_address
+        self._plic_addr    = plic_address
+        self._plic_nint    = plic_nint
         # IO
-        self.wbslaves = [CoreGenerator.SlavePort(addr_start=start, addr_width=size, features=['err'], name=name)
-                         for name, (start, size) in self.wbports.items()]
-        self.external_interrupt = Signal()  # input
-        self.timer_interrupt    = Signal()  # input
-        self.software_interrupt = Signal()  # input
+        self.extports = [CoreGenerator.SlavePort(addr_start=start, addr_width=size, features=['err'], ifname=ifname)
+                         for ifname, (start, size) in external_ports.items()]
+        self.interrupts = Signal(plic_nint)
 
     def port_list(self) -> list:
-        mport = [getattr(port.interface, name) for port in self.wbslaves for name, _, _ in port.interface.layout]
+        mport = [getattr(port.interface, name) for port in self.extports for name, _, _ in port.interface.layout]
 
         return [
             *mport,
-            self.external_interrupt,
-            self.timer_interrupt,
-            self.software_interrupt
+            self.interrupts
         ]
 
     def elaborate(self, platform: Platform) -> Module:
@@ -66,34 +69,38 @@ class CoreGenerator(Elaboratable):
 
         # ------------------------------------------------------------
         # instantiate the cores
-        cores = [Core(**self.core_kw) for _ in range(self.ncores)]
+        cores = [Core(**self.core_kw, hartid=idx) for idx in range(self._ncores)]
         for idx, core in enumerate(cores):
             setattr(m.submodules, f'core{idx}', core)  # get a proper name in the trace
 
         # ------------------------------------------------------------
-        # build the interconnect
-        nmasters = self.ncores
-        nslaves  = len(self.wbports)
-        masters  = [core.wbport for core in cores]
-        slaves   = self.wbslaves
+        # instantiate CoreInt
+        coreint = m.submodules.coreint = CoreInterrupts(ncores=self._ncores)
+        coreint_port = CoreGenerator.SlavePort(addr_start=self._coreint_addr, addr_width=14, features=[], ifname='coreint')
 
-        if nmasters == 1 and nslaves == 1:
-            # direct connection
-            m.d.comb += masters[0].connect(slaves[0])
-        elif nmasters == 1 and nslaves > 1:
-            # decoder
+        m.d.comb += coreint_port.interface.connect(coreint.wbport)
+        # connect TI and SI
+        for idx, core in enumerate(cores):
+            m.d.comb += [
+                core.timer_interrupt.eq(coreint.timer_interrupt[idx]),
+                core.software_interrupt.eq(coreint.software_interrupt[idx])
+            ]
+        # ------------------------------------------------------------
+        # instantiate PLIC
+        # TODO
+
+        # ------------------------------------------------------------
+        # build the interconnect
+        masters = [core.wbport for core in cores]
+        slaves  = [*self.extports, coreint_port]
+
+        if self._ncores == 1:
             decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])
 
             for slave in slaves:
                 decoder.add(slave.interface, addr=slave.addr_start)
 
             m.d.comb += masters[0].connect(decoder.bus)
-        elif nmasters > 1 and nslaves == 1:
-            # arbiter
-            arbiter = m.submodules.arbiter = Arbiter(addr_width=30, data_width=32, granularity=8, features=['err'])
-            for master in masters:
-                arbiter.add(master)
-            m.d.comb += arbiter.bus.connect(slaves[0].interface)
         else:
             # crossbar
             # create the matrix
@@ -115,22 +122,12 @@ class CoreGenerator(Elaboratable):
 
             # arbitrate the column to slave
             for column, slave in zip(zip(*access), slaves):
-                arbiter = Arbiter(addr_width=slave.addr_width - 2, data_width=32, granularity=8, features=['err'])
+                arbiter = Arbiter(addr_width=slave.addr_width - 2, data_width=32, granularity=8)
                 m.submodules += arbiter
 
                 for bus in column:
                     arbiter.add(bus)
 
                 m.d.comb += arbiter.bus.connect(slave.interface)
-
-        # ------------------------------------------------------------
-        # connect the interrupt lines
-        # TODO: connect to the PIC.
-        for core in cores:
-            m.d.comb += [
-                core.external_interrupt.eq(self.external_interrupt),
-                core.timer_interrupt.eq(self.timer_interrupt),
-                core.software_interrupt.eq(self.software_interrupt)
-            ]
 
         return m

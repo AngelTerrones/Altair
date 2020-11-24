@@ -33,9 +33,7 @@ module top (
     wire        io__ack;
     wire        io__err;
 
-    wire  external_interrupt;
-    wire  timer_interrupt;
-    wire  software_interrupt;
+    wire [7:0] interrupts;
 
     wire         unused;
 
@@ -46,6 +44,7 @@ module top (
                      .mport__cyc         (mport__cyc),
                      .mport__stb         (mport__stb),
                      .mport__we          (mport__we),
+                     .interrupts         (interrupts),
                      .io__adr            (io__addr),
                      .io__dat_w          (io__dat_w),
                      .io__sel            (io__sel),
@@ -60,10 +59,7 @@ module top (
                      .mport__err         (0),
                      .io__dat_r          (io__dat_r),
                      .io__ack            (io__ack),
-                     .io__err            (io__err),
-                     .external_interrupt (external_interrupt),
-                     .timer_interrupt    (timer_interrupt),
-                     .software_interrupt (software_interrupt)
+                     .io__err            (io__err)
                      );
 
     // slave 0: @BASE_ADDR
@@ -87,25 +83,24 @@ module top (
                     .dwbs_we           (mport__we)
                     );
 
-    // slave 1: @0x1000_0000
+    // slave 1: @0x4000_0000
     interrupt int_helper(
-                         .clk                (clk),
-                         .rst                (rst),
-                         .int_addr           (io__addr),
-                         .int_dat_w          (io__dat_w),
-                         .int_sel            (io__sel),
-                         .int_cyc            (io__cyc),
-                         .int_stb            (io__stb),
-                         .int_cti            (0),
-                         .int_bte            (0),
-                         .int_we             (io__we),
-                         .int_dat_r          (io__dat_r),
-                         .int_ack            (io__ack),
-                         .int_err            (io__err),
-                         .external_interrupt (external_interrupt),
-                         .timer_interrupt    (timer_interrupt),
-                         .software_interrupt (software_interrupt)
+                         .clk        (clk),
+                         .rst        (rst),
+                         .int_addr   (io__addr),
+                         .int_dat_w  (io__dat_w),
+                         .int_sel    (io__sel),
+                         .int_cyc    (io__cyc),
+                         .int_stb    (io__stb),
+                         .int_cti    (0),
+                         .int_bte    (0),
+                         .int_we     (io__we),
+                         .int_dat_r  (io__dat_r),
+                         .int_ack    (io__ack),
+                         .int_err    (io__err),
+                         .interrupts (interrupts)
                          );
+
     //--------------------------------------------------------------------------
 endmodule
 

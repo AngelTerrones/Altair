@@ -21,19 +21,13 @@ module interrupt(
         output reg        int_ack,
         output wire       int_err,
         // interrupt
-        output wire external_interrupt,
-        output wire timer_interrupt,
-        output wire software_interrupt
+        output wire [7:0] interrupts
         );
     //--------------------------------------------------------------------------
-    reg soft_int;  // @BASEADDRESS + 0
-    reg timer_int; // @BASEADDRESS + 1
-    reg ext_int;   // @BASEADDRESS + 2
+    reg [7:0] int_reg;  // @BASEADDRESS + 0
 
     // reg to output
-    assign external_interrupt = ext_int;
-    assign timer_interrupt    = timer_int;
-    assign software_interrupt = soft_int;
+    assign interrupts = int_reg;
 
     // ACK logic
     always @(posedge clk or posedge rst) begin
@@ -49,9 +43,7 @@ module interrupt(
     // read logic
     always @(posedge clk or posedge rst) begin
         case (int_addr[1:0])
-            2'b00: int_dat_r <= {31'b0, soft_int};
-            2'b01: int_dat_r <= {31'b0, timer_int};
-            2'b10: int_dat_r <= {31'b0, ext_int};
+            2'b00: int_dat_r <= {24'b0, int_reg};
             default: int_dat_r <= 32'bx;
         endcase
     end
@@ -61,16 +53,12 @@ module interrupt(
         if (int_ack && (&int_sel)) begin
             // verilator lint_off CASEINCOMPLETE
             case (int_addr[1:0])
-                2'b00:  soft_int  <= int_dat_w[0];
-                2'b01:  timer_int <= int_dat_w[0];
-                2'b10:  ext_int   <= int_dat_w[0];
+                2'b00:  int_reg <= int_dat_w[7:0];
             endcase
             // verilator lint_on CASEINCOMPLETE
         end
         if (rst) begin
-            ext_int   <= 0;
-            timer_int <= 0;
-            soft_int  <= 0;
+            int_reg   <= 0;
         end
     end
 

@@ -18,6 +18,7 @@
         external_ports: {
             # address and size using byte addressing
             mport: [0x8000_0000, 22],
+            io: [0x4000_0000, 16]
         }
     }
 }

@@ -10,6 +10,7 @@ from nmigen_soc.wishbone.bus import Decoder
 from nmigen_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
 from altair.gateware.platform.coreint import CoreInterrupts
+from altair.gateware.platform.plic import PLIC
 from typing import List
 
 
@@ -76,7 +77,7 @@ class CoreGenerator(Elaboratable):
         # ------------------------------------------------------------
         # instantiate CoreInt
         coreint = m.submodules.coreint = CoreInterrupts(ncores=self._ncores)
-        coreint_port = CoreGenerator.SlavePort(addr_start=self._coreint_addr, addr_width=14, features=[], ifname='coreint')
+        coreint_port = CoreGenerator.SlavePort(addr_start=self._coreint_addr, addr_width=16, features=[], ifname='coreint')
 
         m.d.comb += coreint_port.interface.connect(coreint.wbport)
         # connect TI and SI
@@ -87,12 +88,20 @@ class CoreGenerator(Elaboratable):
             ]
         # ------------------------------------------------------------
         # instantiate PLIC
-        # TODO
+        plic = m.submodules.plic = PLIC(ncores=self._ncores, ninterrupts=self._plic_nint)
+        plic_port = CoreGenerator.SlavePort(addr_start=self._plic_addr, addr_width=16, features=[], ifname='plic')
+
+        m.d.comb += [
+            plic_port.interface.connect(plic.wbport),
+            plic.interrupts.eq(self.interrupts)
+        ]
+        for idx, core in enumerate(cores):
+            m.d.comb += core.external_interrupt.eq(plic.core_interrupt[idx])
 
         # ------------------------------------------------------------
         # build the interconnect
         masters = [core.wbport for core in cores]
-        slaves  = [*self.extports, coreint_port]
+        slaves  = [*self.extports, coreint_port, plic_port]
 
         if self._ncores == 1:
             decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])

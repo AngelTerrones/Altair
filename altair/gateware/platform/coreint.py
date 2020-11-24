@@ -15,11 +15,10 @@ class CoreInterrupts(Elaboratable):
     SIZE_MTIMECMP = 1
     SIZE_XTIMER   = 2
     BASE_MSIP     = 0
-    BASE_MTIMECMP = 256 * SIZE_MTIMECMP
+    BASE_MTIMECMP = BASE_MSIP + (256 * SIZE_MTIMECMP)
     BASE_MTIME    = BASE_MTIMECMP + (256 * SIZE_XTIMER)
 
-    def __init__(self,
-                 ncores: int = 1) -> None:
+    def __init__(self, ncores: int = 1) -> None:
         # ----------------------------------------------------------------------
         # config
         self._ncores  = ncores
@@ -29,7 +28,8 @@ class CoreInterrupts(Elaboratable):
         self._msip     = [Element(1, 'rw', name=f'msip{n}') for n in range(ncores)]
         self._mtimecmp = [Element(64, 'rw', name=f'mtimecmp{n}') for n in range(ncores)]
         self._mtime    = Element(64, 'rw', name='mtime')
-
+        # ----------------------------------------------------------------------
+        # Add the registers to the mux. Create the bridge
         self._mux      = Multiplexer(addr_width=14, data_width=32)
         for idx, msip in enumerate(self._msip):
             self._mux.add(msip, addr=CoreInterrupts.BASE_MSIP + (CoreInterrupts.SIZE_MTIMECMP * idx))

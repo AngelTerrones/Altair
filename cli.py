@@ -82,22 +82,15 @@ def build_testbench(args):
         # run make
         os.environ['BCONFIG'] = configfile
         try:
-            output = subprocess.check_output(f'make -C {path} -j$(nproc)', shell=True, text=True, stderr=subprocess.STDOUT)
-            if args.verbose:
-                print(output)
+            subprocess.check_call(f'make -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
             print('--------------------------------------------------')
             print('Build: DONE')
             print('--------------------------------------------------')
         except CalledProcessError as error:
-            output = error.stdout
             print('--------------------------------------------------')
             print('Build with errors:\n')
-            print(output)
+            print(error.stdout)
             print('--------------------------------------------------')
-
-        logfile = os.path.abspath(f'build/{variant}/build.log')
-        with open(logfile, 'w') as f:
-            f.write(output)
 
 
 def run_compliance(args):
@@ -162,7 +155,6 @@ def main() -> None:
     p_buildtb = p_action.add_parser('buildtb', help='Build the Verilator simulator')
     p_buildtb.add_argument('--variant', choices=cpu_variants, nargs='+', required=True, help='CPU type')
     p_buildtb.add_argument('--config', help='Configuration file for custom variants')
-    p_buildtb.add_argument('--verbose', action='store_true', help='Show build log')
     # --------------------------------------------------------------------------
     # run compliance test
     p_compliance = p_action.add_parser('compliance', help='Run the RISC-V compliance test')

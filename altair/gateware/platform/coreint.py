@@ -12,6 +12,7 @@ from nmigen_soc.csr.wishbone import WishboneCSRBridge
 
 class CoreInterrupts(Elaboratable):
     # the addressing is done by words...
+    # Max number of cores: 256
     SIZE_MTIMECMP = 1
     SIZE_XTIMER   = 2
     BASE_MSIP     = 0
@@ -22,7 +23,7 @@ class CoreInterrupts(Elaboratable):
         # ----------------------------------------------------------------------
         # config
         self._ncores  = ncores
-        self._clk_div = 10
+        self._clk_div = 10  # TODO make this a parameter.
         # ----------------------------------------------------------------------
         # control registers
         self._msip     = [Element(1, 'rw', name=f'msip{n}') for n in range(ncores)]
@@ -30,7 +31,7 @@ class CoreInterrupts(Elaboratable):
         self._mtime    = Element(64, 'rw', name='mtime')
         # ----------------------------------------------------------------------
         # Add the registers to the mux. Create the bridge
-        self._mux      = Multiplexer(addr_width=14, data_width=32)
+        self._mux = Multiplexer(addr_width=14, data_width=32)
         for idx, msip in enumerate(self._msip):
             self._mux.add(msip, addr=CoreInterrupts.BASE_MSIP + (CoreInterrupts.SIZE_MTIMECMP * idx))
         for idx, mtimecmp in enumerate(self._mtimecmp):

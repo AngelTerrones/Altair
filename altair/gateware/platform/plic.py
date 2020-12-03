@@ -16,6 +16,7 @@ from nmigen_soc.event import EventMap
 
 class PLIC(Elaboratable):
     # the addressing is done by words...
+    # Max number of cores: 256
     SIZE         = 1
     BASE_PENDING = 0
     BASE_ENABLE  = BASE_PENDING + (256 * SIZE)
@@ -27,7 +28,7 @@ class PLIC(Elaboratable):
             raise ValueError(f'ninterrupts must be an integer, not greater than 32: {ninterrupts}')
         # ----------------------------------------------------------------------
         # config
-        self._ncores = ncores
+        self._ncores      = ncores
         self._ninterrupts = ninterrupts
         # ----------------------------------------------------------------------
         # Control registers

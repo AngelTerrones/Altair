@@ -77,8 +77,9 @@ class LoadStoreUnit(Elaboratable):
         self.address    = Signal(32)
         self.store_data = Signal(32)
         self.load_data  = Signal(32)
-        self.load       = Signal()
-        self.store      = Signal()
+        self.write      = Signal()
+        self.cycle      = Signal()
+        self.strobe     = Signal()
         self.op         = Signal(Funct3)
         self.ready      = Signal()
         self.error      = Signal()
@@ -101,9 +102,9 @@ class LoadStoreUnit(Elaboratable):
             self.mport.adr.eq(self.address[2:]),
             self.mport.dat_w.eq(dataformat.data_write),
             self.mport.sel.eq(dataformat.byte_sel),
-            self.mport.we.eq(self.store),
-            self.mport.cyc.eq(~self.misaligned & (self.load | self.store)),
-            self.mport.stb.eq(~self.misaligned & (self.load | self.store)),
+            self.mport.we.eq(self.write),
+            self.mport.cyc.eq(~self.misaligned & self.cycle),
+            self.mport.stb.eq(self.strobe),
 
             self.ready.eq(self.mport.ack),
             self.error.eq(self.mport.err),

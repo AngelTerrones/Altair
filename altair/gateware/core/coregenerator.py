@@ -19,6 +19,7 @@ class CoreGenerator(Elaboratable):
         def __init__(self, *, addr_start: int, addr_width: int, features: List[str], ifname: str) -> None:
             self.interface = Interface(addr_width=addr_width - 2, data_width=32, granularity=8,
                                        features=features, name=ifname)
+            self.name                 = ifname
             self.interface.memory_map = MemoryMap(addr_width=addr_width, data_width=8)
             self.addr_start           = addr_start
             self.addr_width           = addr_width
@@ -27,6 +28,7 @@ class CoreGenerator(Elaboratable):
                  # Core
                  reset_address: int = 0x8000_0000,
                  enable_rv32m: bool = False,
+                 enable_rv32a: bool = False,
                  enable_extra_csr: bool = False,
                  enable_user_mode: bool = False,
                  enable_triggers: bool = False,
@@ -43,6 +45,7 @@ class CoreGenerator(Elaboratable):
         # config
         self.core_kw = dict(reset_address=reset_address,
                             enable_rv32m=enable_rv32m,
+                            enable_rv32a=enable_rv32a,
                             enable_extra_csr=enable_extra_csr,
                             enable_user_mode=enable_user_mode,
                             enable_triggers=enable_triggers,
@@ -68,11 +71,22 @@ class CoreGenerator(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
+        # search for 'mport'
+        # TODO maybe make 'mport' and 'ioport' the default ports. O incluir múltiple 'snoop' ports
+        # for now, the snoop ports listen the only memory port.
+        mport = [port for port in self.extports if port.name == 'mport'][0]
         # ------------------------------------------------------------
         # instantiate the cores
         cores = [Core(**self.core_kw, hartid=idx) for idx in range(self._ncores)]
         for idx, core in enumerate(cores):
             setattr(m.submodules, f'core{idx}', core)  # get a proper name in the trace
+            if self.core_kw['enable_rv32a']:
+                m.d.comb += [
+                    core.snoop.address.eq(mport.interface.adr),
+                    core.snoop.we.eq(mport.interface.we),
+                    core.snoop.valid.eq(mport.interface.cyc),
+                    core.snoop.ack.eq(mport.interface.ack)
+                ]
 
         # ------------------------------------------------------------
         # instantiate CoreInt

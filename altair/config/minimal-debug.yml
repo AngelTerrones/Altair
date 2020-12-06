@@ -3,6 +3,7 @@
         reset_address: 0x80000000,
         #ISA
         enable_rv32m: False,
+        enable_rv32a: False,
         enable_extra_csr: True,
         enable_user_mode: False,
         # Debug

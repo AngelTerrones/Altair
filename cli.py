@@ -161,7 +161,7 @@ def main() -> None:
     p_compliance.add_argument('--rvc', required=True, help='Path to riscv-compliance')
     p_compliance.add_argument('--variant', choices=cpu_variants, nargs='+', required=True, help='CPU type')
     p_compliance.add_argument('--config', help='Configuration file for custom variants')
-    p_compliance.add_argument('--isa', choices=['rv32i', 'rv32im', 'rv32mi', 'rv32ui', 'rv32Zicsr', 'rv32Zifencei'],
+    p_compliance.add_argument('--isa', choices=['rv32i', 'rv32im', 'rv32mi', 'rv32ui', 'rv32ua', 'rv32Zicsr', 'rv32Zifencei'],
                               nargs='+', required=True, help='Available compliance tests',)
     # --------------------------------------------------------------------------
     args = parser.parse_args()

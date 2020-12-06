@@ -19,17 +19,32 @@ class Opcode(IntEnum):
     OP     = 0b0110011
     FENCE  = 0b0001111
     SYSTEM = 0b1110011
+    AMO    = 0b0101111
 
 
 class Funct3(IntEnum):
-    BEQ  = B  = ADD  = FENCE  = PRIV   = MUL    = 0b000
-    BNE  = H  = SLL  = FENCEI = CSRRW  = MULH   = 0b001
-    _0   = W  = SLT  = _1     = CSRRS  = MULHSU = 0b010
-    _2   = _3 = SLTU = _4     = CSRRC  = MULHU  = 0b011
-    BLT  = BU = XOR  = _5     = _6     = DIV    = 0b100
-    BGE  = HU = SR   = _7     = CSRRWI = DIVU   = 0b101
-    BLTU = _8 = OR   = _9     = CSRRSI = REM    = 0b110
-    BGEU = _a = AND  = _b     = CSRRCI = REMU   = 0b111
+    BEQ  = B  = ADD  = FENCE  = PRIV   = MUL    = _c  = 0b000
+    BNE  = H  = SLL  = FENCEI = CSRRW  = MULH   = _d  = 0b001
+    _0   = W  = SLT  = _5     = CSRRS  = MULHSU = AMO = 0b010
+    _1   = _2 = SLTU = _6     = CSRRC  = MULHU  = _e  = 0b011
+    BLT  = BU = XOR  = _7     = _b     = DIV    = _f  = 0b100
+    BGE  = HU = SR   = _8     = CSRRWI = DIVU   = _g  = 0b101
+    BLTU = _3 = OR   = _9     = CSRRSI = REM    = _h  = 0b110
+    BGEU = _4 = AND  = _a     = CSRRCI = REMU   = _i  = 0b111
+
+
+class Funct5(IntEnum):
+    LR      = 0b00010
+    SC      = 0b00011
+    AMOSWAP = 0b00001
+    AMOADD  = 0b00000
+    AMOXOR  = 0b00100
+    AMOAND  = 0b01100
+    AMOOR   = 0b01000
+    AMOMIN  = 0b10000
+    AMOMAX  = 0b10100
+    AMOMINU = 0b11000
+    AMOMAXU = 0b11100
 
 
 class Funct7(IntEnum):

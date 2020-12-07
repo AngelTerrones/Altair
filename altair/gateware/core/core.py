@@ -395,11 +395,9 @@ class Core(Elaboratable):
                         if self.enable_extra_csr:
                             m.d.comb += exceptunit.w_retire.eq(1)
                         m.next = 'FETCH'
-                    with m.Elif(decoder.is_ld | decoder.is_st):
-                        m.next = 'MEMLS'
+                    with m.Elif(decoder.is_ld | decoder.is_st | decoder.is_lrsc):
+                        m.next = 'MEMLS/LRSC'
                     if self.enable_rv32a:
-                        with m.Elif(decoder.is_lrsc):
-                            m.next = 'LRSC'
                         with m.Elif(decoder.is_amo):
                             m.next = 'AMO'
                     with m.Elif(decoder.is_csr):
@@ -421,32 +419,42 @@ class Core(Elaboratable):
                             ]
 
                         m.next = 'TRAP'
-            with m.State('MEMLS'):
-                m.d.comb += debug_state.eq(self.str2value('MEMLS'))
+            with m.State('MEMLS/LRSC'):
+                m.d.comb += debug_state.eq(self.str2value('MEMLS/LRSC'))
+                is_ld = decoder.is_ld | decoder.inst_lr
+                is_st = decoder.is_st | decoder.inst_sc
 
-                valid = 1
+                valid = ~lrsc.sc_fail if self.enable_rv32a else 1
                 if self.enable_trigger:
                     valid = valid & ~trigger.trap
                     m.d.comb += [
                         trigger.x_valid.eq(1),
-                        trigger.x_load.eq(decoder.is_ld),
-                        trigger.x_store.eq(decoder.is_st),
+                        trigger.x_load.eq(is_ld),
+                        trigger.x_store.eq(is_st),
+                    ]
+                if self.enable_rv32a:
+                    m.d.comb += [
+                        lrsc.is_lr.eq(decoder.inst_lr),
+                        lrsc.is_sc.eq(decoder.inst_sc)
                     ]
 
                 # connect LSU
                 m.d.comb += [
                     lsu.address.eq(add_out),
                     lsu.store_data.eq(gprf_rp2.data),
-                    lsu.write.eq(decoder.is_st),
+                    lsu.write.eq(is_st),
                     lsu.cycle.eq(valid),
                     lsu.strobe.eq(valid),
                     lsu.op.eq(decoder.funct3)
                 ]
                 # Next state and extra logic
-                with m.If(lsu.ready):
+                ready = lsu.ready | lrsc.sc_fail if self.enable_rv32a else lsu.ready
+                with m.If(ready):
                     m.d.sync += ld_out.eq(lsu.load_data)
                     if self.enable_rv32a:
-                        m.d.comb += lrsc.cancel_reservation.eq(lsu.write)
+                        m.d.comb += lrsc.cancel_reservation.eq(is_st)
+                        with m.If(decoder.inst_sc):
+                            m.d.sync += ld_out.eq(lrsc.sc_fail)
 
                     m.next = 'COMMIT'
                 with m.Elif(lsu.error | lsu.misaligned):
@@ -455,13 +463,13 @@ class Core(Elaboratable):
                         exceptunit.edata.eq(add_out),
                         exceptunit.m_exception.eq(1)
                     ]
-                    with m.If(decoder.is_ld & lsu.error):
+                    with m.If(is_ld & lsu.error):
                         m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ACCESS_FAULT)
-                    with m.If(decoder.is_ld & lsu.misaligned):
+                    with m.If(is_ld & lsu.misaligned):
                         m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ADDR_MISALIGNED)
-                    with m.If(decoder.is_st & lsu.error):
+                    with m.If(is_st & lsu.error):
                         m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
-                    with m.If(decoder.is_st & lsu.misaligned):
+                    with m.If(is_st & lsu.misaligned):
                         m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
 
                     m.next = 'TRAP'
@@ -475,65 +483,6 @@ class Core(Elaboratable):
                         ]
                         m.next = 'TRAP'
             if self.enable_rv32a:
-                with m.State('LRSC'):
-                    m.d.comb += debug_state.eq(self.str2value('LRSC'))
-
-                    valid = ~lrsc.sc_fail  # either an LR or SC instruction
-                    if self.enable_trigger:
-                        valid = valid & ~trigger.trap
-                        m.d.comb += [
-                            trigger.x_valid.eq(1),
-                            trigger.x_load.eq(decoder.inst_lr),
-                            trigger.x_store.eq(decoder.inst_sc),
-                        ]
-                    m.d.comb += [
-                        lrsc.is_lr.eq(decoder.inst_lr),
-                        lrsc.is_sc.eq(decoder.inst_sc)
-                    ]
-
-                    # connect LSU
-                    m.d.comb += [
-                        lsu.address.eq(add_out),
-                        lsu.store_data.eq(gprf_rp2.data),
-                        lsu.write.eq(decoder.inst_sc),
-                        lsu.cycle.eq(valid),
-                        lsu.strobe.eq(valid),
-                        lsu.op.eq(decoder.funct3)
-                    ]
-                    # Next state and extra logic
-                    with m.If(lsu.ready | lrsc.sc_fail):
-                        with m.If(decoder.inst_lr):
-                            m.d.sync += ld_out.eq(lsu.load_data)
-                        with m.If(decoder.inst_sc):
-                            m.d.sync += ld_out.eq(lrsc.sc_fail)
-                            m.d.comb += lrsc.cancel_reservation.eq(1)
-
-                        m.next = 'COMMIT'
-                    with m.Elif(lsu.error | lsu.misaligned):
-                        m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(add_out),
-                            exceptunit.m_exception.eq(1)
-                        ]
-                        with m.If(decoder.inst_lr & lsu.error):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ACCESS_FAULT)
-                        with m.If(decoder.inst_lr & lsu.misaligned):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ADDR_MISALIGNED)
-                        with m.If(decoder.inst_sc & lsu.error):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
-                        with m.If(decoder.inst_sc & lsu.misaligned):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
-
-                        m.next = 'TRAP'
-                    if self.enable_trigger:
-                        with m.If(trigger.trap):
-                            m.d.sync += [
-                                exceptunit.enable.eq(1),
-                                exceptunit.edata.eq(pc),
-                                exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
-                                exceptunit.m_exception.eq(1)
-                            ]
-                            m.next = 'TRAP'
                 with m.State('AMO'):
                     m.d.comb += debug_state.eq(self.str2value('AMO'))
 

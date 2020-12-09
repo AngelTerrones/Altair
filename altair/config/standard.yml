@@ -16,10 +16,7 @@
         coreint_address: 0x1000_0000,
         plic_address: 0x2000_0000,
         plic_nint: 8,
-        external_ports: {
-            # address and size using byte addressing
-            mport: [0x8000_0000, 22],
-            io: [0x4000_0000, 16]
-        }
+        mport: [0x8000_0000, 22],
+        io: [0x4000_0000, 16]
     }
 }

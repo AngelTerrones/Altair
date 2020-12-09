@@ -39,7 +39,8 @@ class CoreGenerator(Elaboratable):
                  coreint_address: int = 0x2000_0000,
                  plic_address: int = 0x3000_0000,
                  plic_nint: int = 16,
-                 external_ports: dict = {}
+                 mport: list = [],
+                 io: list = []
                  ) -> None:
         # ----------------------------------------------------------------------
         # config
@@ -56,25 +57,23 @@ class CoreGenerator(Elaboratable):
         self._plic_addr    = plic_address
         self._plic_nint    = plic_nint
         # IO
-        self.extports = [CoreGenerator.SlavePort(addr_start=start, addr_width=size, features=['err'], ifname=ifname)
-                         for ifname, (start, size) in external_ports.items()]
+        self.mport      = CoreGenerator.SlavePort(addr_start=mport[0], addr_width=mport[1], features=['err'], ifname='mport')
+        self.io         = CoreGenerator.SlavePort(addr_start=io[0], addr_width=io[1], features=['err'], ifname='io')
         self.interrupts = Signal(plic_nint)
 
     def port_list(self) -> list:
-        mport = [getattr(port.interface, name) for port in self.extports for name, _, _ in port.interface.layout]
+        mport = [getattr(self.mport.interface, name) for name, _, _ in self.mport.interface.layout]
+        io    = [getattr(self.io.interface, name) for name, _, _ in self.io.interface.layout]
 
         return [
             *mport,
+            *io,
             self.interrupts
         ]
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        # search for 'mport'
-        # TODO maybe make 'mport' and 'ioport' the default ports. O incluir múltiple 'snoop' ports
-        # for now, the snoop ports listen the only memory port.
-        mport = [port for port in self.extports if port.name == 'mport'][0]
         # ------------------------------------------------------------
         # instantiate the cores
         cores = [Core(**self.core_kw, hartid=idx) for idx in range(self._ncores)]
@@ -82,10 +81,10 @@ class CoreGenerator(Elaboratable):
             setattr(m.submodules, f'core{idx}', core)  # get a proper name in the trace
             if self.core_kw['enable_rv32a']:
                 m.d.comb += [
-                    core.snoop.address.eq(mport.interface.adr),
-                    core.snoop.we.eq(mport.interface.we),
-                    core.snoop.valid.eq(mport.interface.cyc),
-                    core.snoop.ack.eq(mport.interface.ack)
+                    core.snoop.address.eq(self.mport.interface.adr),
+                    core.snoop.we.eq(self.mport.interface.we),
+                    core.snoop.valid.eq(self.mport.interface.cyc),
+                    core.snoop.ack.eq(self.mport.interface.ack)
                 ]
 
         # ------------------------------------------------------------
@@ -115,7 +114,7 @@ class CoreGenerator(Elaboratable):
         # ------------------------------------------------------------
         # build the interconnect
         masters = [core.wbport for core in cores]
-        slaves  = [*self.extports, coreint_port, plic_port]
+        slaves  = [self.mport, self.io, coreint_port, plic_port]
 
         if self._ncores == 1:
             decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])

@@ -9,7 +9,7 @@ EXE			:= core
 RTLDIR		:= .
 TVERILATOR	:= $TVERILATOR
 TBDIR		:= $$(TVERILATOR)/verilog
-VSOURCES	:= $$(shell find $$(RTLDIR) $$(TBDIR) -name "*.v")
+VSOURCES	:= $$(shell find $$(RTLDIR) -name "*.v")
 VTOP		:= $$(RTLDIR)/top.v
 #--------------------------------------------------
 VOBJ		:= obj_dir_$$(EXE)

@@ -63,16 +63,15 @@ def build_testbench(args):
         rebuild = need_rebuild(path)
         if (os.path.exists(f'{path}/core.exe') and not rebuild):
             print('Testbench up-to-date. Skipping.')
-            continue
+        else:
+            # generate verilog
+            os.makedirs(path, exist_ok=True)
+            core_config = load_config(variant, args.config)
+            CPU_to_verilog(core_config, f'{path}/altair_core.v')
 
-        # generate verilog
-        os.makedirs(path, exist_ok=True)
-        core_config = load_config(variant, args.config)
-        CPU_to_verilog(core_config, f'{path}/altair_core.v')
-
-        # generate testbench and makefile
-        generate_testbench(core_config, path)
-        generate_makefile(path)
+            # generate testbench and makefile
+            generate_testbench(core_config, path)
+            generate_makefile(path)
         # get the config file
         if variant == 'custom':
             configfile = args.config

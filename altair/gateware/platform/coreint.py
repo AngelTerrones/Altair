@@ -13,6 +13,7 @@ from nmigen_soc.csr.wishbone import WishboneCSRBridge
 class CoreInterrupts(Elaboratable):
     # the addressing is done by words...
     # Max number of cores: 256
+    ADDR_WIDTH    = 16
     SIZE_MTIMECMP = 1
     SIZE_XTIMER   = 2
     BASE_MSIP     = 0

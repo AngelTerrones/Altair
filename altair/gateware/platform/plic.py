@@ -17,6 +17,7 @@ from nmigen_soc.event import EventMap
 class PLIC(Elaboratable):
     # the addressing is done by words...
     # Max number of cores: 256
+    ADDR_WIDTH   = 16
     SIZE         = 1
     BASE_PENDING = 0
     BASE_ENABLE  = BASE_PENDING + (256 * SIZE)

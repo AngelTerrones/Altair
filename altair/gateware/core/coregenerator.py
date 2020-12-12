@@ -11,6 +11,7 @@ from nmigen_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
 from altair.gateware.platform.coreint import CoreInterrupts
 from altair.gateware.platform.plic import PLIC
+from altair.gateware.platform.rom import ROM
 from typing import List
 
 
@@ -39,8 +40,11 @@ class CoreGenerator(Elaboratable):
                  coreint_address: int = 0x2000_0000,
                  plic_address: int = 0x3000_0000,
                  plic_nint: int = 16,
+                 rom_address: int = 0x4000_0000,
                  mport: list = [],
-                 io: list = []
+                 io: list = [],
+                 # build
+                 build_path: str = 'build/'
                  ) -> None:
         # ----------------------------------------------------------------------
         # config
@@ -56,6 +60,8 @@ class CoreGenerator(Elaboratable):
         self._coreint_addr = coreint_address
         self._plic_addr    = plic_address
         self._plic_nint    = plic_nint
+        self._rom_address  = rom_address
+        self._build_path   = build_path
         # IO
         self.mport      = CoreGenerator.SlavePort(addr_start=mport[0], addr_width=mport[1], features=['err'], ifname='mport')
         self.io         = CoreGenerator.SlavePort(addr_start=io[0], addr_width=io[1], features=['err'], ifname='io')
@@ -90,7 +96,7 @@ class CoreGenerator(Elaboratable):
         # ------------------------------------------------------------
         # instantiate CoreInt
         coreint = m.submodules.coreint = CoreInterrupts(ncores=self._ncores)
-        coreint_port = CoreGenerator.SlavePort(addr_start=self._coreint_addr, addr_width=16, features=[], ifname='coreint')
+        coreint_port = CoreGenerator.SlavePort(addr_start=self._coreint_addr, addr_width=CoreInterrupts.ADDR_WIDTH, features=[], ifname='coreint')
 
         m.d.comb += coreint_port.interface.connect(coreint.wbport)
         # connect TI and SI
@@ -102,7 +108,7 @@ class CoreGenerator(Elaboratable):
         # ------------------------------------------------------------
         # instantiate PLIC
         plic = m.submodules.plic = PLIC(ncores=self._ncores, ninterrupts=self._plic_nint)
-        plic_port = CoreGenerator.SlavePort(addr_start=self._plic_addr, addr_width=16, features=[], ifname='plic')
+        plic_port = CoreGenerator.SlavePort(addr_start=self._plic_addr, addr_width=PLIC.ADDR_WIDTH, features=[], ifname='plic')
 
         m.d.comb += [
             plic_port.interface.connect(plic.wbport),
@@ -110,11 +116,17 @@ class CoreGenerator(Elaboratable):
         ]
         for idx, core in enumerate(cores):
             m.d.comb += core.external_interrupt.eq(plic.core_interrupt[idx])
+        # ------------------------------------------------------------
+        # ROM
+        ROM.generate_bootrom(path=self._build_path, start=self._rom_address, target=self.mport.addr_start)
+        rom = m.submodules.rom = ROM(elffile=f'{self._build_path}/boot/boot.elf', start=self._rom_address)
+        rom_port = CoreGenerator.SlavePort(addr_start=self._rom_address, addr_width=ROM.ADDR_WIDTH, features=[], ifname='rom')
 
+        m.d.comb += rom_port.interface.connect(rom.wbport)
         # ------------------------------------------------------------
         # build the interconnect
         masters = [core.wbport for core in cores]
-        slaves  = [self.mport, self.io, coreint_port, plic_port]
+        slaves  = [self.mport, self.io, coreint_port, plic_port, rom_port]
 
         if self._ncores == 1:
             decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])

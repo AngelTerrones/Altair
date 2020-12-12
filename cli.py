@@ -33,17 +33,17 @@ def need_rebuild(bfolder: str):
     return False
 
 
-def CPU_to_verilog(core_config: dict, vfile: str):
+def CPU_to_verilog(core_config: dict, path: str, vfile: str):
     core_args     = core_config['core']
     platform_args = core_config['platform']
-    cpu           = CoreGenerator(**core_args, **platform_args)
+    cpu           = CoreGenerator(**core_args, **platform_args, build_path=path)
     ports         = cpu.port_list()
 
     # generate the verilog file
     fragment = Fragment.get(cpu, None)
-    output = verilog.convert(fragment, name='altair_core', ports=ports)
+    output   = verilog.convert(fragment, name='altair_core', ports=ports)
     try:
-        with open(vfile, 'w') as f:
+        with open(f'{path}/{vfile}', 'w') as f:
             f.write(output)
     except EnvironmentError as error:
         print(f"Error: {error}. Check if the output path exists.", file=sys.stderr)
@@ -67,7 +67,7 @@ def build_testbench(args):
             # generate verilog
             os.makedirs(path, exist_ok=True)
             core_config = load_config(variant, args.config)
-            CPU_to_verilog(core_config, f'{path}/altair_core.v')
+            CPU_to_verilog(core_config, path, 'altair_core.v')
 
             # generate testbench and makefile
             generate_testbench(core_config, path)
@@ -81,14 +81,14 @@ def build_testbench(args):
         # run make
         os.environ['BCONFIG'] = configfile
         try:
-            subprocess.check_call(f'make -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
+            subprocess.check_call(f'make --no-print-directory -C {path} -j$(nproc)', shell=True, stderr=subprocess.STDOUT)
             print('--------------------------------------------------')
             print('Build: DONE')
             print('--------------------------------------------------')
         except CalledProcessError as error:
             print('--------------------------------------------------')
             print('Build with errors:\n')
-            print(error.stdout)
+            print(error)
             print('--------------------------------------------------')
 
 
@@ -111,7 +111,7 @@ def run_compliance(args):
         isa_msg = []
         for isa in args.isa:
             try:
-                cmd = f'make -C {args.rvc} variant RISCV_TARGET=nht RISCV_DEVICE=rv32i RISCV_ISA={isa}'
+                cmd = f'make --no-print-directory -C {args.rvc} variant RISCV_TARGET=nht RISCV_DEVICE=rv32i RISCV_ISA={isa}'
                 output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
                 isa_msg.append(f'{isa} test ended sucessfully.')
             except CalledProcessError as error:

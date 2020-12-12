@@ -1,6 +1,6 @@
 {
     core: {
-        reset_address: 0x80000000,
+        reset_address: 0x0100_0000,
         #ISA
         enable_rv32m: True,
         enable_rv32a: False,
@@ -13,6 +13,7 @@
     },
     platform: {
         ncores: 1,
+        rom_address: 0x0100_0000,
         coreint_address: 0x1000_0000,
         plic_address: 0x2000_0000,
         plic_nint: 8,

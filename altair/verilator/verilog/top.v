@@ -6,8 +6,18 @@
 `timescale 1 ns / 1 ps
 
 module top (
-    input wire clk,
-    input wire rst
+    input wire         clk,
+    input wire         rst,
+    output wire [5:0]  io__addr,
+    output wire [31:0] io__dat_w,
+    output wire [3:0]  io__sel,
+    output wire        io__we,
+    output wire        io__cyc,
+    output wire        io__stb,
+    input wire [31:0]  io__dat_r,
+    input wire         io__ack,
+    input wire         io__err,
+    input wire [7:0]   interrupts
     );
     //--------------------------------------------------------------------------
     localparam       BASE_ADDR  = 32'h8000_0000;
@@ -22,18 +32,6 @@ module top (
     wire [31:0]              mport__dat_r;
     wire                     mport__ack;
     wire                     mport__err;
-
-    wire [5:0]  io__addr;
-    wire [31:0] io__dat_w;
-    wire [3:0]  io__sel;
-    wire        io__we;
-    wire        io__cyc;
-    wire        io__stb;
-    wire [31:0] io__dat_r;
-    wire        io__ack;
-    wire        io__err;
-
-    wire [7:0] interrupts;
 
     wire         unused;
 
@@ -82,25 +80,6 @@ module top (
                     .dwbs_bte          (0),
                     .dwbs_we           (mport__we)
                     );
-
-    // slave 1: @0x4000_0000
-    interrupt int_helper(
-                         .clk        (clk),
-                         .rst        (rst),
-                         .int_addr   (io__addr),
-                         .int_dat_w  (io__dat_w),
-                         .int_sel    (io__sel),
-                         .int_cyc    (io__cyc),
-                         .int_stb    (io__stb),
-                         .int_cti    (0),
-                         .int_bte    (0),
-                         .int_we     (io__we),
-                         .int_dat_r  (io__dat_r),
-                         .int_ack    (io__ack),
-                         .int_err    (io__err),
-                         .interrupts (interrupts)
-                         );
-
     //--------------------------------------------------------------------------
 endmodule
 

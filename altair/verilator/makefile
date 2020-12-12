@@ -27,7 +27,7 @@ CFLAGS_NEW	:= -faligned-new -Wno-attributes
 CFLAGS_V	:= -Wno-sign-compare
 VROOT		:= $$(shell bash -c 'verilator -V|grep VERILATOR_ROOT | head -1 | sed -e " s/^.*=\s*//"')
 VINCD		:= $$(VROOT)/include
-VINC		:= -I$$(VINCD) -I$$(VINCD)/vltstd -I$$(VOBJ)
+VINC		:= -I$$(VINCD) -I$$(VINCD)/vltstd -I$$(VOBJ) -I.
 VTBINC		:= $$(TVERILATOR)/cpp
 #--------------------------------------------------
 INCS := $$(VINC)

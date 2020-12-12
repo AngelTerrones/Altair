@@ -20,8 +20,8 @@ module top (
     input wire [7:0]   interrupts
     );
     //--------------------------------------------------------------------------
-    localparam       BASE_ADDR  = 32'h8000_0000;
-    localparam [4:0] ADDR_WIDTH = 20;
+    localparam       BASE_ADDR  = $RAM_ADDR;
+    localparam [4:0] ADDR_WIDTH = $RAM_ADDR_WIDTH;
 
     wire [ADDR_WIDTH - 1:0]  mport__addr;
     wire [31:0]              mport__dat_w;

@@ -89,32 +89,9 @@ bool CORETB::CheckTOHOST(bool &ok) {
         uint32_t tohost = ram_v_dpi_read_word(m_tohost);
         if (tohost == 0)
                 return false;
-        bool isPtr = (tohost - MEMSTART) <= MEMSZ; // check if the value is inside the memory region = is a pointer
-        bool _exit = tohost == 1 || not isPtr;
         ok         = tohost == 1;
         m_exitCode = tohost;
-        if (not _exit) {
-                // if tohost is not an exit code from the test, is a sycall (executin a benchmark).
-                const uint32_t data0 = tohost;
-                const uint32_t data1 = data0 + 8; // 64-bit aligned
-                if (ram_v_dpi_read_word(data0) == SYSCALL and ram_v_dpi_read_word(data1) == 1) {
-                        SyscallPrint(data0);
-                        ram_v_dpi_write_word(m_fromhost, 1); // reset to inital state
-                        ram_v_dpi_write_word(m_tohost, 0);   // reset to inital state
-                } else {
-                        _exit = true;
-                }
-        }
-        return _exit;
-}
-// -----------------------------------------------------------------------------
-void CORETB::SyscallPrint(const uint32_t base_addr) const {
-        svSetScope(svGetScopeFromName("TOP.top.memory")); // Set the scope before using DPI functions
-        const uint64_t data_addr = ram_v_dpi_read_word(base_addr + 16); // dword 2: offset = 16 bytes.
-        const uint64_t size      = ram_v_dpi_read_word(base_addr + 24); // dword 3: offset = 24 bytes.
-        for (uint32_t ii = 0; ii < size; ii++) {
-                printf("%c", ram_v_dpi_read_byte(data_addr + ii));
-        }
+        return true;
 }
 // -----------------------------------------------------------------------------
 void CORETB::LoadMemory(const std::string &progfile) {

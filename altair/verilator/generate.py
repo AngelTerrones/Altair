@@ -29,12 +29,6 @@ _define_h = '''#ifndef DEFINES_H
 #define MEMSTART $RAM_ADDR    // Initial address
 #define MEMSZ    $RAM_SIZE    // size: 16 MB
 // -----------------------------------------------------------------------------
-// syscall (benchmarks)
-#define SYSCALL  64
-// For interrupt simulation
-#define XINT_S   0x80002000u
-#define XINT_T   0x80002004u
-#define XINT_E   0x80002008u
 
 #endif
 '''

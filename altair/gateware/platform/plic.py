@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
-from nmigen import Cat
-from nmigen import Signal
-from nmigen import Module
-from nmigen import Elaboratable
-from nmigen.lib.coding import PriorityEncoder
-from nmigen.build import Platform
-from nmigen_soc.csr.bus import Element
-from nmigen_soc.csr.bus import Multiplexer
-from nmigen_soc.csr.wishbone import WishboneCSRBridge
-from nmigen_soc.event import Monitor
-from nmigen_soc.event import Source
-from nmigen_soc.event import EventMap
+from amaranth import Cat
+from amaranth import Signal
+from amaranth import Module
+from amaranth import Elaboratable
+from amaranth.lib.coding import PriorityEncoder
+from amaranth.build import Platform
+from amaranth_soc.csr.bus import Element
+from amaranth_soc.csr.bus import Multiplexer
+from amaranth_soc.csr.wishbone import WishboneCSRBridge
+from amaranth_soc.event import Monitor
+from amaranth_soc.event import Source
+from amaranth_soc.event import EventMap
 
 
 class PLIC(Elaboratable):

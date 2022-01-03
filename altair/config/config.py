@@ -3,7 +3,7 @@ import yaml
 from typing import Dict
 
 logo = r'''--------------------------------------------------
-    ALTAIR: A 32-bit RISC-V CPU based on nMigen
+    ALTAIR: A 32-bit RISC-V CPU based on Amaranth
 --------------------------------------------------'''
 
 header = '''\033[1;33m{logo}\033[0m

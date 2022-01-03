@@ -5,11 +5,11 @@ import subprocess
 from subprocess import CalledProcessError
 from string import Template
 from elftools.elf.elffile import ELFFile
-from nmigen import Module
-from nmigen import Memory
-from nmigen import Elaboratable
-from nmigen.build import Platform
-from nmigen_soc.wishbone import Interface
+from amaranth import Module
+from amaranth import Memory
+from amaranth import Elaboratable
+from amaranth.build import Platform
+from amaranth_soc.wishbone import Interface
 
 
 _boot_code = '''#define ram_start $RAM_START

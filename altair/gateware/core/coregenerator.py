@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-from nmigen import Signal
-from nmigen import Module
-from nmigen import Elaboratable
-from nmigen.build import Platform
-from nmigen_soc.memory import MemoryMap
-from nmigen_soc.wishbone.bus import Arbiter
-from nmigen_soc.wishbone.bus import Decoder
-from nmigen_soc.wishbone.bus import Interface
+from amaranth import Signal
+from amaranth import Module
+from amaranth import Elaboratable
+from amaranth.build import Platform
+from amaranth_soc.memory import MemoryMap
+from amaranth_soc.wishbone.bus import Arbiter
+from amaranth_soc.wishbone.bus import Decoder
+from amaranth_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
 from altair.gateware.platform.coreint import CoreInterrupts
 from altair.gateware.platform.plic import PLIC

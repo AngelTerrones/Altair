@@ -7,8 +7,8 @@ import sys
 import argparse
 import subprocess
 from subprocess import CalledProcessError
-from nmigen.back import verilog
-from nmigen.hdl.ir import Fragment
+from amaranth.back import verilog
+from amaranth.hdl.ir import Fragment
 from altair.gateware.core import CoreGenerator
 from altair.config.config import logo
 from altair.config.config import load_config

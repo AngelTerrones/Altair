@@ -3,7 +3,6 @@
 // -----------------------------------------------------------------------------
 
 `default_nettype none
-`timescale 1 ns / 1 ps
 
 // from https://github.com/openrisc/orpsoc-cores/blob/master/cores/wb_common/wb_common.v
 function is_last;

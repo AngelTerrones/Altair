@@ -42,7 +42,7 @@ DEPFILES	:= $$(addprefix $$(VOBJ)/, $$(subst .cpp,.d,$$(SOURCES)))
 all: build-core
 build-core: $$(VSOURCES) $$(VOBJ)/Vtop__ALL.a $$(EXE).exe
 
-run: build-core
+run:
 	./$$(EXE).exe $$(ARGS)
 
 clean:

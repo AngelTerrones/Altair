@@ -35,8 +35,6 @@ _define_h = '''#ifndef DEFINES_H
 
 
 def generate_testbench(config: Dict, path: str) -> None:
-    print(f'\033[0;32mTestbench top file\033[0;0m: {path}top.v')
-
     data_v = dict(RAM_ADDR=config['platform']['mport'][0],
                   RAM_ADDR_WIDTH=config['platform']['mport'][1] - 2)  # byte to word
     data_h = dict(RAM_ADDR=config['platform']['mport'][0],
@@ -55,15 +53,10 @@ def generate_testbench(config: Dict, path: str) -> None:
 
 
 def generate_makefile(path: str):
-    print(f'\033[0;32mVerilator makefile\033[0;0m: {path}/makefile')
-
     data = dict(TVERILATOR=current_path)
-
     # create the template
     with open(makefile_template, 'r') as f:
         template = Template(f.read())
-
     top = template.substitute(data)
-
     with open(path + '/makefile', 'w') as f:
         f.write(top)

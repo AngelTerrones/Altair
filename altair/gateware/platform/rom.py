@@ -66,7 +66,7 @@ class ROM(Elaboratable):
     @staticmethod
     def generate_bootrom(path: str, start: int, target: int):
         outfolder = f'{path}/boot'
-        print(f'\033[0;32mCreate files for boot ROM\033[0;0m: {outfolder}')
+        print(f'Create files for boot ROM')
         os.makedirs(outfolder, exist_ok=True)
         # create the files
         code_dict   = dict(RAM_START=f'{target:#010x}')
@@ -83,14 +83,12 @@ class ROM(Elaboratable):
             f.write(_makefile)
 
         # compile the elf file
-        print('\033[0;32mCompiling boot ROM\033[0;0m')
+        print('Compiling boot ROM')
         try:
-            subprocess.check_call(f'make --no-print-directory -C {outfolder}', shell=True, stderr=subprocess.STDOUT)
+            subprocess.check_output(f'make --no-print-directory -C {outfolder}', text=True, shell=True, stderr=subprocess.STDOUT)
         except CalledProcessError as error:
-            print('--------------------------------------------------')
             print('Unable to build ROM:\n')
-            print(error)
-            print('--------------------------------------------------')
+            print(error.stdout)
             raise error
 
     @staticmethod
@@ -101,12 +99,13 @@ class ROM(Elaboratable):
             # get the number of program headers
             phnum = e.header['e_phnum']
             # get the entries
+            print(f'Loading boot ROM: {elffile}')
             for idx in range(phnum):
                 segment = e.get_segment(idx)
                 data    = segment.data()
                 begin   = segment.header['p_paddr']
                 end     = begin + segment.header['p_filesz']
-                print(f'Segment {idx}: Begin = {hex(begin)}. End = {hex(end)}')
+                print(f'  - Segment {idx}: Begin = {hex(begin)}. End = {hex(end)}')
                 # copy to array
                 b = begin - start
                 e = (end - start) >> 2

@@ -6,12 +6,9 @@ logo = r'''-----------------------------------------------------
     ALTAIR: A 32-bit RISC-V CPU based on Amaranth
 -----------------------------------------------------'''
 
-header = '''\033[1;33m{logo}\033[0m
-
-\033[0;32mConfiguration\033[0;0m
+header = '''\033[0;32mConfiguration\033[0;0m
 Variant name: {variant}
 Config file: {configfile}
-
 \033[0;32mBuild parameters\033[0;0m'''
 
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -51,6 +48,5 @@ def load_config(variant: str, configfile: str, verbose: bool = True) -> Dict:
     if verbose:
         print(header.format(logo=logo, variant=variant, configfile=configfile))
         print_dict(core_config)
-        print('--------------------------------------------------')
 
     return core_config

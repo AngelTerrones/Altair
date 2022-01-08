@@ -12,6 +12,7 @@ from altair.gateware.core import Core
 from altair.gateware.platform.coreint import CoreInterrupts
 from altair.gateware.platform.plic import PLIC
 from altair.gateware.platform.rom import ROM
+from altair.boot.generate import generate_and_load
 from typing import List
 
 
@@ -122,8 +123,8 @@ class CoreGenerator(Elaboratable):
             m.d.comb += core.external_interrupt.eq(plic.core_interrupt[idx])
         # ------------------------------------------------------------
         # ROM
-        ROM.generate_bootrom(path=self._build_path, start=self._rom[0], target=self.mport.addr_start)
-        rom = m.submodules.rom = ROM(elffile=f'{self._build_path}/boot/boot.elf', start=self._rom[0], addr_width=self._rom[1])
+        rom_img = generate_and_load(path=self._build_path, start=self._rom[0], target=self.mport.addr_start, size=1 << self._rom[1])
+        rom = m.submodules.rom = ROM(addr_width=self._rom[1], rom_img=rom_img)
         rom_port = CoreGenerator.SlavePort(addr_start=self._rom[0], addr_width=self._rom[1], features=[], ifname='rom')
 
         m.d.comb += rom_port.interface.connect(rom.wbport)

@@ -12,13 +12,14 @@ from amaranth_soc.csr.wishbone import WishboneCSRBridge
 
 class CoreInterrupts(Elaboratable):
     # the addressing is done by words...
-    # Max number of cores: 256
-    ADDR_WIDTH    = 16
-    SIZE_MTIMECMP = 1
-    SIZE_XTIMER   = 2
+    # for (1 msip + 2 mtimecmp) reg/core x 256 cores + 2 xtime = 770 registers -> 1024 regs (empty space...)
+    ADDR_WIDTH    = 10  # 2^n words
+    SIZE_MSIP     = 1
+    SIZE_MTIMECMP = 2
+    MAX_NCORES    = 256
     BASE_MSIP     = 0
-    BASE_MTIMECMP = BASE_MSIP + (256 * SIZE_MTIMECMP)
-    BASE_MTIME    = BASE_MTIMECMP + (256 * SIZE_XTIMER)
+    BASE_MTIMECMP = BASE_MSIP     + (MAX_NCORES * SIZE_MSIP)
+    BASE_MTIME    = BASE_MTIMECMP + (MAX_NCORES * SIZE_MTIMECMP)
 
     def __init__(self, ncores: int = 1) -> None:
         # ----------------------------------------------------------------------
@@ -32,11 +33,11 @@ class CoreInterrupts(Elaboratable):
         self._mtime    = Element(64, 'rw', name='mtime')
         # ----------------------------------------------------------------------
         # Add the registers to the mux. Create the bridge
-        self._mux = Multiplexer(addr_width=14, data_width=32)
+        self._mux = Multiplexer(addr_width=CoreInterrupts.ADDR_WIDTH, data_width=32)
         for idx, msip in enumerate(self._msip):
-            self._mux.add(msip, addr=CoreInterrupts.BASE_MSIP + (CoreInterrupts.SIZE_MTIMECMP * idx))
+            self._mux.add(msip, addr=CoreInterrupts.BASE_MSIP + (CoreInterrupts.SIZE_MSIP * idx))
         for idx, mtimecmp in enumerate(self._mtimecmp):
-            self._mux.add(mtimecmp, addr=CoreInterrupts.BASE_MTIMECMP + (CoreInterrupts.SIZE_XTIMER * idx))
+            self._mux.add(mtimecmp, addr=CoreInterrupts.BASE_MTIMECMP + (CoreInterrupts.BASE_MTIMECMP * idx))
         self._mux.add(self._mtime, addr=CoreInterrupts.BASE_MTIME)
 
         self._bridge = WishboneCSRBridge(self._mux.bus, data_width=32)

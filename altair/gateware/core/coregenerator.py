@@ -18,12 +18,16 @@ from typing import List
 class CoreGenerator(Elaboratable):
     class SlavePort:
         def __init__(self, *, addr_start: int, addr_width: int, features: List[str], ifname: str) -> None:
-            self.interface = Interface(addr_width=addr_width - 2, data_width=32, granularity=8,
-                                       features=features, name=ifname)
-            self.name                 = ifname
-            self.interface.memory_map = MemoryMap(addr_width=addr_width, data_width=8)
-            self.addr_start           = addr_start
-            self.addr_width           = addr_width
+            """Create the memory interface (bus): address width for words and a granularity of 8, enabling
+            byte addressing.
+            The memory map must be addr_width + 2 in this case (+2 due to data_width/granularity = 4 bytes per word)
+            """
+            iface = Interface(addr_width=addr_width, data_width=32, granularity=8, features=features, name=ifname)
+            iface.memory_map = MemoryMap(addr_width=addr_width + 2, data_width=8)
+            self.interface   = iface
+            self.name        = ifname
+            self.addr_start  = addr_start
+            self.addr_width  = addr_width
 
     def __init__(self,
                  # Core
@@ -40,7 +44,7 @@ class CoreGenerator(Elaboratable):
                  coreint_address: int = 0x2000_0000,
                  plic_address: int = 0x3000_0000,
                  plic_nint: int = 16,
-                 rom_address: int = 0x4000_0000,
+                 rom: list = [],
                  mport: list = [],
                  io: list = [],
                  # build
@@ -60,7 +64,7 @@ class CoreGenerator(Elaboratable):
         self._coreint_addr = coreint_address
         self._plic_addr    = plic_address
         self._plic_nint    = plic_nint
-        self._rom_address  = rom_address
+        self._rom          = rom
         self._build_path   = build_path
         # IO
         self.mport      = CoreGenerator.SlavePort(addr_start=mport[0], addr_width=mport[1], features=['err'], ifname='mport')
@@ -118,9 +122,9 @@ class CoreGenerator(Elaboratable):
             m.d.comb += core.external_interrupt.eq(plic.core_interrupt[idx])
         # ------------------------------------------------------------
         # ROM
-        ROM.generate_bootrom(path=self._build_path, start=self._rom_address, target=self.mport.addr_start)
-        rom = m.submodules.rom = ROM(elffile=f'{self._build_path}/boot/boot.elf', start=self._rom_address)
-        rom_port = CoreGenerator.SlavePort(addr_start=self._rom_address, addr_width=ROM.ADDR_WIDTH, features=[], ifname='rom')
+        ROM.generate_bootrom(path=self._build_path, start=self._rom[0], target=self.mport.addr_start)
+        rom = m.submodules.rom = ROM(elffile=f'{self._build_path}/boot/boot.elf', start=self._rom[0], addr_width=self._rom[1])
+        rom_port = CoreGenerator.SlavePort(addr_start=self._rom[0], addr_width=self._rom[1], features=[], ifname='rom')
 
         m.d.comb += rom_port.interface.connect(rom.wbport)
         # ------------------------------------------------------------
@@ -138,7 +142,7 @@ class CoreGenerator(Elaboratable):
         else:
             # crossbar
             # create the matrix
-            access = [[Interface(addr_width=slave.addr_width - 2, data_width=32, granularity=8, features=['err']) for slave in slaves]
+            access = [[Interface(addr_width=slave.addr_width, data_width=32, granularity=8, features=['err']) for slave in slaves]
                       for _ in enumerate(masters)]
             for row in access:
                 for port, slave in zip(row, slaves):
@@ -156,7 +160,7 @@ class CoreGenerator(Elaboratable):
 
             # arbitrate the column to slave
             for column, slave in zip(zip(*access), slaves):
-                arbiter = Arbiter(addr_width=slave.addr_width - 2, data_width=32, granularity=8)
+                arbiter = Arbiter(addr_width=slave.addr_width, data_width=32, granularity=8)
                 m.submodules += arbiter
 
                 for bus in column:

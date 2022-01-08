@@ -53,15 +53,15 @@ all: boot.elf
 
 
 class ROM(Elaboratable):
-    ADDR_WIDTH  = 6
-
-    def __init__(self, elffile: str, start: int) -> None:
+    def __init__(self, elffile: str, start: int, addr_width: int) -> None:
+        self.addr_width = addr_width  # for words
+        self.size       = 1 << addr_width
         # ----------------------------------------------------------------------
         # IO
-        self.wbport = Interface(addr_width=ROM.ADDR_WIDTH, data_width=32, features=['err'], name='rom')
+        self.wbport = Interface(addr_width=addr_width, data_width=32, features=['err'], name='rom')
         # ----------------------------------------------------------------------
         # Load the elf file
-        self.rom_img = ROM.load_elf(elffile, start)
+        self.rom_img = ROM.load_elf(elffile, start, self.size)
 
     @staticmethod
     def generate_bootrom(path: str, start: int, target: int):
@@ -92,8 +92,8 @@ class ROM(Elaboratable):
             raise error
 
     @staticmethod
-    def load_elf(elffile: str, start: int):
-        img = [0 for _ in range(1 << ROM.ADDR_WIDTH)]
+    def load_elf(elffile: str, start: int, size: int):
+        img = [0 for _ in range(size)]
         with open(elffile, 'rb') as f:
             e = ELFFile(f)
             # get the number of program headers
@@ -116,8 +116,8 @@ class ROM(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        rom     = Memory(width=32, depth=(1 << 16), init=self.rom_img, name='rom_mem')
-        rom_rp  = m.submodules.rom_rp = rom.read_port(transparent=False)
+        rom    = Memory(width=32, depth=self.size, init=self.rom_img, name='rom_mem')
+        rom_rp = m.submodules.rom_rp = rom.read_port(transparent=False)
 
         m.d.comb += [
             rom_rp.addr.eq(self.wbport.adr),

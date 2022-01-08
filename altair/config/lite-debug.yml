@@ -13,11 +13,11 @@
     },
     platform: {
         ncores: 1,
-        rom_address: 0x0100_0000,
         coreint_address: 0x1000_0000,
         plic_address: 0x2000_0000,
         plic_nint: 8,
-        mport: [0x8000_0000, 22],
-        io: [0x4000_0000, 16]
+        rom: [0x0100_0000, 8],
+        mport: [0x8000_0000, 20],
+        io: [0x4000_0000, 14]
     }
 }

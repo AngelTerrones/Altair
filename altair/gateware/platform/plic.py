@@ -16,13 +16,14 @@ from amaranth_soc.event import EventMap
 
 class PLIC(Elaboratable):
     # the addressing is done by words...
-    # Max number of cores: 256
-    ADDR_WIDTH   = 16
-    SIZE         = 1
+    # for 4 types/core x 256 cores x 1 reg/type = 1024 registers (word)
+    ADDR_WIDTH   = 10 # 2^n words
+    SIZE         = 1  # word
+    MAX_NCORES   = 256
     BASE_PENDING = 0
-    BASE_ENABLE  = BASE_PENDING + (256 * SIZE)
-    BASE_SOURCE  = BASE_ENABLE + (256 * SIZE)
-    BASE_CLEAR   = BASE_SOURCE + (256 * SIZE)
+    BASE_ENABLE  = BASE_PENDING + (MAX_NCORES * SIZE)
+    BASE_SOURCE  = BASE_ENABLE  + (MAX_NCORES * SIZE)
+    BASE_CLEAR   = BASE_SOURCE  + (MAX_NCORES * SIZE)
 
     def __init__(self, ncores: int = 1, ninterrupts: int = 2) -> None:
         if not isinstance(ninterrupts, int) or ninterrupts > 32:
@@ -35,11 +36,11 @@ class PLIC(Elaboratable):
         # Control registers
         self._pending   = [Element(ninterrupts, 'r', name=f'pending{n}') for n in range(ncores)]
         self._enable    = [Element(ninterrupts, 'rw', name=f'enable{n}') for n in range(ncores)]
-        self._source_id = [Element(32, 'r', name=f'source{n}') for n in range(ncores)]
+        self._source_id = [Element(32, 'r', name=f'source{n}') for n in range(ncores)]  # Mmm, this could be 5, not 32?
         self._clear     = [Element(ninterrupts, 'rw', name=f'clear{n}') for n in range(ncores)]
         # ----------------------------------------------------------------------
         # Add the registers to the mux. Create the bridge
-        self._mux    = Multiplexer(addr_width=14, data_width=32)
+        self._mux = Multiplexer(addr_width=PLIC.ADDR_WIDTH, data_width=32)
         for idx, reg in enumerate(self._pending):
             self._mux.add(reg, addr=PLIC.BASE_PENDING + (idx * PLIC.SIZE))
         for idx, reg in enumerate(self._enable):
@@ -63,7 +64,7 @@ class PLIC(Elaboratable):
         # ------------------------------------------------------------
         # create the sources, and create the maps
         interrurp_src = [[Source(trigger='level', name=f'intsrc{i}{j}') for j in range(self._ninterrupts)] for i in range(self._ncores)]
-        event_maps    = [EventMap() for n in range(self._ncores)]
+        event_maps    = [EventMap() for _ in range(self._ncores)]
 
         for intsrc, eventmap in zip(interrurp_src, event_maps):
             for src in intsrc:
@@ -107,6 +108,6 @@ class PLIC(Elaboratable):
             with m.If(enable.w_stb):
                 m.d.sync += monitor.enable.eq(enable.w_data)
             with m.If(clear.w_stb):
-                m.d.comb += monitor.clear.eq(clear.w_data)
+                m.d.comb += monitor.clear.eq(clear.w_data)  # TODO move to sync
 
         return m

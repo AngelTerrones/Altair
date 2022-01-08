@@ -52,9 +52,9 @@ def CPU_to_verilog(core_config: dict, path: str, vfile: str):
 
 def generate_cpu_verilog(args):
     # load configuration
-    print(args)
     core_config = load_config(args.variant, args.config, args.verbose)
-    CPU_to_verilog(core_config, args.filename)
+    path, filename = os.path.split(args.filename)
+    CPU_to_verilog(core_config, path, filename)
 
 
 def build_testbench(args):
@@ -90,18 +90,24 @@ def build_testbench(args):
         os.environ['BCONFIG'] = configfile
         print('\033[0;32mCompiling the testbench:\033[0;0m ', end='', flush=True)
         try:
-            output = subprocess.check_output(f'make --no-print-directory -C {path} -j$(nproc)', text=True, shell=True, stderr=subprocess.STDOUT)
+            if args.verbose:
+                print()
+                output = subprocess.check_call(f'make --no-print-directory -C {path} -j$(nproc)', text=True, shell=True, stderr=subprocess.STDOUT)
+            else:
+                output = subprocess.check_output(f'make --no-print-directory -C {path} -j$(nproc)', text=True, shell=True, stderr=subprocess.STDOUT)
+                print('DONE')
             result[variant] = True
-            print('DONE')
         except CalledProcessError as error:
             result[variant] = False
-            output = error.stdout
-            print('ERROR\n')
-            print(output)
+            if not args.verbose:
+                output = error.stdout
+                print('ERROR\n')
+                print(output)
         # write the build log
-        logfile = os.path.abspath(f'build/{variant}/{variant}.log')
-        with open(logfile, 'w') as f:
-            f.write(output)
+        if not args.verbose:
+            logfile = os.path.abspath(f'build/{variant}/build.log')
+            with open(logfile, 'w') as f:
+                f.write(output)
 
     return result
 
@@ -176,7 +182,7 @@ def main() -> None:
     p_buildtb = p_action.add_parser('buildtb', help='Build the Verilator simulator')
     p_buildtb.add_argument('--variant', choices=cpu_variants, nargs='+', required=True, help='CPU type')
     p_buildtb.add_argument('--config', help='Configuration file for custom variants')
-    p_buildtb.add_argument('--verbose', action='store_true', help='Print the configuration file')
+    p_buildtb.add_argument('--verbose', action='store_true', help='Print the configuration file and compilation output')
     # --------------------------------------------------------------------------
     # run compliance test
     p_compliance = p_action.add_parser('compliance', help='Run the RISC-V compliance test')
@@ -185,7 +191,7 @@ def main() -> None:
     p_compliance.add_argument('--config', help='Configuration file for custom variants')
     p_compliance.add_argument('--isa', choices=['rv32i', 'rv32im', 'rv32mi', 'rv32ui', 'rv32ua', 'rv32Zicsr', 'rv32Zifencei'],
                               nargs='+', required=True, help='Available compliance tests',)
-    p_compliance.add_argument('--verbose', action='store_true', help='Print the configuration file')
+    p_compliance.add_argument('--verbose', action='store_true', help='Print the configuration file and build output')
     # --------------------------------------------------------------------------
     args = parser.parse_args()
     # --------------------------------------------------------------------------

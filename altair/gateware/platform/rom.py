@@ -14,7 +14,7 @@ class ROM(Elaboratable):
         self.rom_img = rom_img
         # ----------------------------------------------------------------------
         # IO
-        self.wbport = Interface(addr_width=addr_width, data_width=32, features=['err'], name='rom')
+        self.wbport = Interface(addr_width=addr_width, data_width=32, name='rom')
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()

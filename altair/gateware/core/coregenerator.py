@@ -143,16 +143,16 @@ class CoreGenerator(Elaboratable):
         else:
             # crossbar
             # create the matrix
-            access = [[Interface(addr_width=slave.addr_width, data_width=32, granularity=8, features=['err']) for slave in slaves]
-                      for _ in enumerate(masters)]
+            access = [[Interface(addr_width=slave.addr_width, data_width=32, granularity=8, features=['err'], name=f'xbar{idm}{ids}')for ids, slave in enumerate(slaves)]
+                      for idm, _ in enumerate(masters)]
             for row in access:
                 for port, slave in zip(row, slaves):
                     port.memory_map = slave.interface.memory_map
 
             # decode each master to access row
-            for row, master in zip(access, masters):
+            for idx, (row, master) in enumerate(zip(access, masters)):
                 decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])
-                m.submodules += decoder
+                setattr(m.submodules, f'xbar_decoder_{idx}', decoder)  # get a proper name in the trace
 
                 for bus, slave in zip(row, slaves):
                     decoder.add(bus, addr=slave.addr_start)
@@ -161,8 +161,11 @@ class CoreGenerator(Elaboratable):
 
             # arbitrate the column to slave
             for column, slave in zip(zip(*access), slaves):
-                arbiter = Arbiter(addr_width=slave.addr_width, data_width=32, granularity=8)
-                m.submodules += arbiter
+                features = []
+                if hasattr(slave.interface, 'err'):
+                    features = ['err']
+                arbiter = Arbiter(addr_width=slave.addr_width, data_width=32, granularity=8, features=features)
+                setattr(m.submodules, f'xbar_arbiter_{slave.name}', arbiter)  # get a proper name in the trace
 
                 for bus in column:
                     arbiter.add(bus)

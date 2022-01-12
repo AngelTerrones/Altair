@@ -73,6 +73,9 @@ class _DataFormat(Elaboratable):
 
 class LoadStoreUnit(Elaboratable):
     def __init__(self) -> None:
+        # submodules
+        self._dataformat = _DataFormat()
+        # IO
         self.mport      = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='mport')
         self.address    = Signal(32)
         self.store_data = Signal(32)
@@ -88,27 +91,25 @@ class LoadStoreUnit(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        m.submodules.dataformat = dataformat = _DataFormat()
+        m.submodules.dataformat = self._dataformat
 
         m.d.comb += [
-            dataformat.op.eq(self.op),
-            dataformat.offset.eq(self.address[:2]),
-            dataformat.store_data.eq(self.store_data),
-            self.load_data.eq(dataformat.load_data),
-            self.misaligned.eq(dataformat.misaligned)
-        ]
+            self._dataformat.op.eq(self.op),
+            self._dataformat.offset.eq(self.address[:2]),
+            self._dataformat.store_data.eq(self.store_data),
+            self.load_data.eq(self._dataformat.load_data),
+            self.misaligned.eq(self._dataformat.misaligned),
 
-        m.d.comb += [
             self.mport.adr.eq(self.address[2:]),
-            self.mport.dat_w.eq(dataformat.data_write),
-            self.mport.sel.eq(dataformat.byte_sel),
+            self.mport.dat_w.eq(self._dataformat.data_write),
+            self.mport.sel.eq(self._dataformat.byte_sel),
             self.mport.we.eq(self.write),
             self.mport.cyc.eq(~self.misaligned & self.cycle),
             self.mport.stb.eq(self.strobe),
 
             self.ready.eq(self.mport.ack),
             self.error.eq(self.mport.err),
-            dataformat.data_read.eq(self.mport.dat_r)
+            self._dataformat.data_read.eq(self.mport.dat_r)
         ]
 
         return m

@@ -24,7 +24,7 @@ class LRSC(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        reservation = Signal(30)
+        reservation       = Signal(30)
         valid_reservation = Signal()
 
         # Do the reservation (LR)

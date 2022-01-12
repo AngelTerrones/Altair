@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from amaranth import Cat
 from amaranth import Signal
 from amaranth import Module

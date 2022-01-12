@@ -46,12 +46,28 @@ class Core(Elaboratable):
         self.enable_trigger    = enable_triggers
         self.trigger_ntriggers = ntriggers
         self.debug_enable      = debug_enable
-        # dicts
-        self.exception_unit_kw = dict(hartid=hartid,
-                                      enable_rv32m=self.enable_rv32m,
-                                      enable_extra_csr=self.enable_extra_csr,
-                                      enable_user_mode=self.enable_user_mode,
-                                      reset_address=self.reset_address)
+        # Instantiate units
+        self._lsu        = LoadStoreUnit()
+        self._decoder    = DecoderUnit(self.enable_rv32m, self.enable_rv32a)
+        self._csr        = CSRFile()
+        self._exceptunit = ExceptionUnit(csrf=self._csr,
+                                         hartid=hartid,
+                                         enable_rv32m=self.enable_rv32m,
+                                         enable_extra_csr=self.enable_extra_csr,
+                                         enable_user_mode=self.enable_user_mode,
+                                         reset_address=self.reset_address)
+        gprf           = Memory(width=32, depth=32)
+        self._gprf_rp1 = gprf.read_port(transparent=False)
+        self._gprf_rp2 = gprf.read_port(transparent=False)
+        self._gprf_wp  = gprf.write_port()
+        if self.enable_rv32m:
+            self._multiplier = Multiplier()
+            self._divider    = Divider()
+        if self.enable_trigger:
+            self._trigger = TriggerModule(privmode=self._exceptunit.m_privmode,
+                                          ntriggers=self.trigger_ntriggers,
+                                          csrf=self._csr,
+                                          enable_user_mode=self.enable_user_mode)
         # IO
         self.wbport             = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='wbport')
         self.external_interrupt = Signal()  # input
@@ -109,36 +125,30 @@ class Core(Elaboratable):
         csr_src     = Signal(32)
         csr_wdata   = Signal(32)
         # ----------------------------------------------------------------------
-        # Units
-        lsu        = m.submodules.lsu       = LoadStoreUnit()
-        decoder    = m.submodules.decoder   = DecoderUnit(self.enable_rv32m, self.enable_rv32a)
-        csr        = m.submodules.csr       = CSRFile()
-        exceptunit = m.submodules.exception = ExceptionUnit(csr, **self.exception_unit_kw)
-        # Register file
-        gprf     = Memory(width=32, depth=32)
-        gprf_rp1 = gprf.read_port(transparent=False)
-        gprf_rp2 = gprf.read_port(transparent=False)
-        gprf_wp  = gprf.write_port()
-        m.submodules += gprf_rp1, gprf_rp2, gprf_wp
-
+        # Register units
+        m.submodules.lsu       = self._lsu
+        m.submodules.decoder   = self._decoder
+        m.submodules.csr       = self._csr
+        m.submodules.exception = self._exceptunit
+        m.submodules += self._gprf_rp1, self._gprf_rp2, self._gprf_wp
+        # optional units: register and connect
         if self.enable_rv32m:
-            multiplier = m.submodules.multiplier = Multiplier()
-            divider    = m.submodules.divider    = Divider()
-
+            m.submodules.multiplier = self._multiplier
+            m.submodules.divider    = self._divider
             m.d.comb += [
-                multiplier.op.eq(decoder.funct3),
-                multiplier.dat1.eq(gprf_rp1.data),
-                multiplier.dat2.eq(gprf_rp2.data),
-                multiplier.valid.eq(multdiv & decoder.is_mul),
-                mult_result.eq(multiplier.result),
-                mult_ack.eq(multiplier.ready),
+                self._multiplier.op.eq(self._decoder.funct3),
+                self._multiplier.dat1.eq(self._gprf_rp1.data),
+                self._multiplier.dat2.eq(self._gprf_rp2.data),
+                self._multiplier.valid.eq(multdiv & self._decoder.is_mul),
+                mult_result.eq(self._multiplier.result),
+                mult_ack.eq(self._multiplier.ready),
 
-                divider.op.eq(decoder.funct3),
-                divider.dat1.eq(gprf_rp1.data),
-                divider.dat2.eq(gprf_rp2.data),
-                divider.valid.eq(multdiv & decoder.is_div),
-                div_result.eq(divider.result),
-                div_ack.eq(divider.ready)
+                self._divider.op.eq(self._decoder.funct3),
+                self._divider.dat1.eq(self._gprf_rp1.data),
+                self._divider.dat2.eq(self._gprf_rp2.data),
+                self._divider.valid.eq(multdiv & self._decoder.is_div),
+                div_result.eq(self._divider.result),
+                div_ack.eq(self._divider.ready)
             ]
         else:
             m.d.comb += [
@@ -149,13 +159,10 @@ class Core(Elaboratable):
             ]
 
         if self.enable_trigger:
-            trigger = m.submodules.trigger = TriggerModule(privmode=exceptunit.m_privmode,
-                                                           ntriggers=self.trigger_ntriggers,
-                                                           csrf=csr,
-                                                           enable_user_mode=self.enable_user_mode)
+            m.submodules.trigger = self._trigger
             m.d.comb += [
-                trigger.x_pc.eq(pc),
-                trigger.x_bus_addr.eq(add_out)
+                self._trigger.x_pc.eq(pc),
+                self._trigger.x_bus_addr.eq(add_out)
             ]
 
         if self.enable_rv32a:
@@ -168,109 +175,109 @@ class Core(Elaboratable):
 
                 lrsc.internal.address.eq(self.wbport.adr),
                 lrsc.internal.we.eq(self.wbport.we),
-                lrsc.internal.valid.eq(self.wbport.cyc & decoder.is_lrsc),
+                lrsc.internal.valid.eq(self.wbport.cyc & self._decoder.is_lrsc),
                 lrsc.internal.ack.eq(self.wbport.ack),
             ]
 
-        # Port
-        m.d.comb += lsu.mport.connect(self.wbport)
+        # Memory port
+        m.d.comb += self._lsu.mport.connect(self.wbport)
 
         # ALU A
-        with m.If(decoder.inst_lui):
+        with m.If(self._decoder.inst_lui):
             m.d.comb += alu_a.eq(0)
-        with m.Elif(decoder.inst_auipc | decoder.inst_jal | decoder.is_b):
+        with m.Elif(self._decoder.inst_auipc | self._decoder.inst_jal | self._decoder.is_b):
             m.d.comb += alu_a.eq(pc)
         with m.Else():
-            m.d.comb += alu_a.eq(gprf_rp1.data)
+            m.d.comb += alu_a.eq(self._gprf_rp1.data)
 
         # ALU B
-        with m.If(decoder.inst_lui | decoder.inst_auipc | decoder.is_j | decoder.is_b | decoder.is_ld | decoder.is_st | decoder.is_imm):
-            m.d.comb += alu_b.eq(decoder.immediate)
-        with m.Elif(decoder.inst_sub):
-            m.d.comb += alu_b.eq(~gprf_rp2.data)
+        with m.If(self._decoder.inst_lui | self._decoder.inst_auipc | self._decoder.is_j | self._decoder.is_b | self._decoder.is_ld | self._decoder.is_st | self._decoder.is_imm):
+            m.d.comb += alu_b.eq(self._decoder.immediate)
+        with m.Elif(self._decoder.inst_sub):
+            m.d.comb += alu_b.eq(~self._gprf_rp2.data)
         if self.enable_rv32a:
-            with m.Elif(decoder.is_amo | decoder.is_lrsc):
+            with m.Elif(self._decoder.is_amo | self._decoder.is_lrsc):
                 m.d.comb += alu_b.eq(0)
         with m.Else():
-            m.d.comb += alu_b.eq(gprf_rp2.data)
+            m.d.comb += alu_b.eq(self._gprf_rp2.data)
 
         # CMP
-        with m.If(decoder.inst_slti | decoder.inst_sltiu):
-            m.d.comb += cmp_b.eq(decoder.immediate)
+        with m.If(self._decoder.inst_slti | self._decoder.inst_sltiu):
+            m.d.comb += cmp_b.eq(self._decoder.immediate)
         with m.Else():
-            m.d.comb += cmp_b.eq(gprf_rp2.data)
+            m.d.comb += cmp_b.eq(self._gprf_rp2.data)
 
         # ALU
-        m.d.sync += add_out.eq(alu_a + alu_b + decoder.inst_sub)
+        m.d.sync += add_out.eq(alu_a + alu_b + self._decoder.inst_sub)
 
         # logic
-        with m.If(decoder.inst_and | decoder.inst_andi):
+        with m.If(self._decoder.inst_and | self._decoder.inst_andi):
             m.d.sync += logic_out.eq(alu_a & alu_b)
-        with m.Elif(decoder.inst_or | decoder.inst_ori):
+        with m.Elif(self._decoder.inst_or | self._decoder.inst_ori):
             m.d.sync += logic_out.eq(alu_a | alu_b)
         with m.Else():
             m.d.sync += logic_out.eq(alu_a ^ alu_b)
 
         # compare
         m.d.sync += [
-            is_eq.eq(gprf_rp1.data == cmp_b),
-            is_lt.eq(gprf_rp1.data.as_signed() < cmp_b.as_signed()),
-            is_ltu.eq(gprf_rp1.data < cmp_b)
+            is_eq.eq(self._gprf_rp1.data == cmp_b),
+            is_lt.eq(self._gprf_rp1.data.as_signed() < cmp_b.as_signed()),
+            is_ltu.eq(self._gprf_rp1.data < cmp_b)
         ]
-        m.d.comb += ltx_cmp_out.eq((is_lt & (decoder.inst_slt | decoder.inst_slti)) |
-                                   (is_ltu & (decoder.inst_sltu | decoder.inst_sltiu)))
+        m.d.comb += ltx_cmp_out.eq((is_lt & (self._decoder.inst_slt | self._decoder.inst_slti)) |
+                                   (is_ltu & (self._decoder.inst_sltu | self._decoder.inst_sltiu)))
 
         # shift
-        with m.If(decoder.inst_sll | decoder.inst_slli):
+        with m.If(self._decoder.inst_sll | self._decoder.inst_slli):
             m.d.sync += shift_out.eq(alu_a << alu_b[0:5])
-        with m.Elif(decoder.inst_srl | decoder.inst_srli):
+        with m.Elif(self._decoder.inst_srl | self._decoder.inst_srli):
             m.d.sync += shift_out.eq(alu_a >> alu_b[0:5])
         with m.Else():
             m.d.sync += shift_out.eq(alu_a.as_signed() >> alu_b[0:5])
 
         # JMP/Branch
-        beq  = is_eq & decoder.inst_beq
-        bne  = ~is_eq & decoder.inst_bne
-        blt  = is_lt & decoder.inst_blt
-        bge  = ~is_lt & decoder.inst_bge
-        bltu = is_ltu & decoder.inst_bltu
-        bgeu = ~is_ltu & decoder.inst_bgeu
+        beq  = is_eq & self._decoder.inst_beq
+        bne  = ~is_eq & self._decoder.inst_bne
+        blt  = is_lt & self._decoder.inst_blt
+        bge  = ~is_lt & self._decoder.inst_bge
+        bltu = is_ltu & self._decoder.inst_bltu
+        bgeu = ~is_ltu & self._decoder.inst_bgeu
         m.d.comb += [
             b_taken.eq(beq | bne | blt | bge | bltu | bgeu),
-            jb_error.eq((decoder.is_j | b_taken) & add_out[1])  # check for misalignment
+            jb_error.eq((self._decoder.is_j | b_taken) & add_out[1])  # check for misalignment
         ]
 
         # CSR port
-        m.d.comb += csr.privmode.eq(exceptunit.m_privmode)
+        m.d.comb += self._csr.privmode.eq(self._exceptunit.m_privmode)
 
-        with m.If(decoder.funct3[2]):
-            m.d.sync += csr_src.eq(decoder.gpr_rs1_q)
+        with m.If(self._decoder.funct3[2]):
+            m.d.sync += csr_src.eq(self._decoder.gpr_rs1_q)
         with m.Else():
-            m.d.sync += csr_src.eq(gprf_rp1.data)
+            m.d.sync += csr_src.eq(self._gprf_rp1.data)
 
-        with m.If(decoder.funct3[:2] == 0b01):  # write
+        with m.If(self._decoder.funct3[:2] == 0b01):  # write
             m.d.comb += csr_wdata.eq(csr_src)
-        with m.Elif(decoder.funct3[:2] == 0b10):  # set
-            m.d.comb += csr_wdata.eq(csr.port.dat_r | csr_src)
+        with m.Elif(self._decoder.funct3[:2] == 0b10):  # set
+            m.d.comb += csr_wdata.eq(self._csr.port.dat_r | csr_src)
         with m.Else():  # clear
-            m.d.comb += csr_wdata.eq(csr.port.dat_r & ~csr_src)
+            m.d.comb += csr_wdata.eq(self._csr.port.dat_r & ~csr_src)
 
         # Default: do not read the RF
         m.d.comb += [
-            gprf_rp1.en.eq(0),
-            gprf_rp2.en.eq(0)
+            self._gprf_rp1.en.eq(0),
+            self._gprf_rp2.en.eq(0)
         ]
 
         # Decoder
-        m.d.comb += decoder.privmode.eq(exceptunit.m_privmode)
+        m.d.comb += self._decoder.privmode.eq(self._exceptunit.m_privmode)
 
         # Interrupts
         m.d.comb += [
-            exceptunit.external_interrupt.eq(self.external_interrupt),
-            exceptunit.software_interrupt.eq(self.software_interrupt),
-            exceptunit.timer_interrupt.eq(self.timer_interrupt)
+            self._exceptunit.external_interrupt.eq(self.external_interrupt),
+            self._exceptunit.software_interrupt.eq(self.software_interrupt),
+            self._exceptunit.timer_interrupt.eq(self.timer_interrupt)
         ]
-        m.d.comb += exceptunit.m_pc.eq(pc)
+        m.d.comb += self._exceptunit.m_pc.eq(pc)
 
         # Atomic Memory Operations
         if self.enable_rv32a:
@@ -283,30 +290,30 @@ class Core(Elaboratable):
             with m.FSM(name='amo'):
                 with m.State('load'):
                     m.d.comb += amo_strobe.eq(1)
-                    with m.If(lsu.ready & decoder.is_amo):
-                        m.d.sync += amo_rdata.eq(lsu.load_data)
+                    with m.If(self._lsu.ready & self._decoder.is_amo):
+                        m.d.sync += amo_rdata.eq(self._lsu.load_data)
                         m.next = 'modify'
                 with m.State('modify'):
                     m.d.comb += amo_strobe.eq(0)
 
-                    with m.If(decoder.inst_amoadd):
-                        m.d.sync += amo_wdata.eq(amo_rdata + gprf_rp2.data)
-                    with m.Elif(decoder.inst_amoand):
-                        m.d.sync += amo_wdata.eq(amo_rdata & gprf_rp2.data)
-                    with m.Elif(decoder.inst_amomax):
-                        m.d.sync += amo_wdata.eq(Mux(amo_rdata.as_signed() > gprf_rp2.data.as_signed(), amo_rdata, gprf_rp2.data))
-                    with m.Elif(decoder.inst_amomaxu):
-                        m.d.sync += amo_wdata.eq(Mux(amo_rdata > gprf_rp2.data, amo_rdata, gprf_rp2.data))
-                    with m.Elif(decoder.inst_amomin):
-                        m.d.sync += amo_wdata.eq(Mux(amo_rdata.as_signed() > gprf_rp2.data.as_signed(), gprf_rp2.data, amo_rdata))
-                    with m.Elif(decoder.inst_amominu):
-                        m.d.sync += amo_wdata.eq(Mux(amo_rdata > gprf_rp2.data, gprf_rp2.data, amo_rdata))
-                    with m.Elif(decoder.inst_amoswap):
-                        m.d.sync += amo_wdata.eq(gprf_rp2.data)
-                    with m.Elif(decoder.inst_amoxor):
-                        m.d.sync += amo_wdata.eq(amo_rdata ^ gprf_rp2.data)
-                    with m.Elif(decoder.inst_amoor):
-                        m.d.sync += amo_wdata.eq(amo_rdata | gprf_rp2.data)
+                    with m.If(self._decoder.inst_amoadd):
+                        m.d.sync += amo_wdata.eq(amo_rdata + self._gprf_rp2.data)
+                    with m.Elif(self._decoder.inst_amoand):
+                        m.d.sync += amo_wdata.eq(amo_rdata & self._gprf_rp2.data)
+                    with m.Elif(self._decoder.inst_amomax):
+                        m.d.sync += amo_wdata.eq(Mux(amo_rdata.as_signed() > self._gprf_rp2.data.as_signed(), amo_rdata, self._gprf_rp2.data))
+                    with m.Elif(self._decoder.inst_amomaxu):
+                        m.d.sync += amo_wdata.eq(Mux(amo_rdata > self._gprf_rp2.data, amo_rdata, self._gprf_rp2.data))
+                    with m.Elif(self._decoder.inst_amomin):
+                        m.d.sync += amo_wdata.eq(Mux(amo_rdata.as_signed() > self._gprf_rp2.data.as_signed(), self._gprf_rp2.data, amo_rdata))
+                    with m.Elif(self._decoder.inst_amominu):
+                        m.d.sync += amo_wdata.eq(Mux(amo_rdata > self._gprf_rp2.data, self._gprf_rp2.data, amo_rdata))
+                    with m.Elif(self._decoder.inst_amoswap):
+                        m.d.sync += amo_wdata.eq(self._gprf_rp2.data)
+                    with m.Elif(self._decoder.inst_amoxor):
+                        m.d.sync += amo_wdata.eq(amo_rdata ^ self._gprf_rp2.data)
+                    with m.Elif(self._decoder.inst_amoor):
+                        m.d.sync += amo_wdata.eq(amo_rdata | self._gprf_rp2.data)
 
                     m.next = 'store'
                 with m.State('store'):
@@ -314,10 +321,10 @@ class Core(Elaboratable):
                         amo_strobe.eq(1),
                         amo_write.eq(1)
                     ]
-                    with m.If(lsu.ready):
+                    with m.If(self._lsu.ready):
                         m.d.comb += amo_done.eq(1)
                         m.next = 'load'
-                    with m.Elif(lsu.error):
+                    with m.Elif(self._lsu.error):
                         m.next = 'load'
         # ----------------------------------------------------------------------
         # Main FSM
@@ -331,155 +338,155 @@ class Core(Elaboratable):
 
                 # connect LSU
                 m.d.comb += [
-                    lsu.address.eq(pc),
-                    lsu.store_data.eq(0xdead_c0de),
-                    lsu.write.eq(0),
-                    lsu.cycle.eq(1),
-                    lsu.strobe.eq(1),
-                    lsu.op.eq(Funct3.W)
+                    self._lsu.address.eq(pc),
+                    self._lsu.store_data.eq(0xdead_c0de),
+                    self._lsu.write.eq(0),
+                    self._lsu.cycle.eq(1),
+                    self._lsu.strobe.eq(1),
+                    self._lsu.op.eq(Funct3.W)
                 ]
                 # pre-decoding
                 m.d.comb += [
-                    decoder.instruction_f.eq(lsu.load_data),  # start decoding
-                    decoder.enable.eq(lsu.ready),
-                    gprf_rp1.addr.eq(decoder.gpr_rs1),
-                    gprf_rp1.en.eq(1),
-                    gprf_rp2.addr.eq(decoder.gpr_rs2),
-                    gprf_rp2.en.eq(1)
+                    self._decoder.instruction_f.eq(self._lsu.load_data),  # start decoding
+                    self._decoder.enable.eq(self._lsu.ready),
+                    self._gprf_rp1.addr.eq(self._decoder.gpr_rs1),
+                    self._gprf_rp1.en.eq(1),
+                    self._gprf_rp2.addr.eq(self._decoder.gpr_rs2),
+                    self._gprf_rp2.en.eq(1)
                 ]
 
-                m.d.sync += instruction.eq(lsu.load_data)  # latch the instruction
+                m.d.sync += instruction.eq(self._lsu.load_data)  # latch the instruction
 
-                with m.If(lsu.ready):
+                with m.If(self._lsu.ready):
                     m.next = 'EXECUTE'
-                with m.Elif(lsu.error | lsu.misaligned):
+                with m.Elif(self._lsu.error | self._lsu.misaligned):
                     m.d.sync += [
-                        exceptunit.enable.eq(1),
-                        exceptunit.edata.eq(pc),
-                        exceptunit.ecode.eq(ExceptionCause.E_INST_ADDR_MISALIGNED),
-                        exceptunit.m_exception.eq(1)
+                        self._exceptunit.enable.eq(1),
+                        self._exceptunit.edata.eq(pc),
+                        self._exceptunit.ecode.eq(ExceptionCause.E_INST_ADDR_MISALIGNED),
+                        self._exceptunit.m_exception.eq(1)
                     ]
-                    with m.If(lsu.error):
-                        m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_INST_ACCESS_FAULT)
+                    with m.If(self._lsu.error):
+                        m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_INST_ACCESS_FAULT)
 
                     m.next = 'TRAP'
             with m.State('EXECUTE'):
                 m.d.comb += debug_state.eq(self.str2value('EXECUTE'))
                 if self.enable_trigger:
-                    m.d.comb += trigger.x_valid.eq(1)
+                    m.d.comb += self._trigger.x_valid.eq(1)
 
-                with m.If(exceptunit.m_interrupt):
+                with m.If(self._exceptunit.m_interrupt):
                     m.d.sync += [
-                        exceptunit.enable.eq(1),
-                        exceptunit.edata.eq(instruction)
+                        self._exceptunit.enable.eq(1),
+                        self._exceptunit.edata.eq(instruction)
                     ]
                     m.next = 'TRAP'
                 if self.enable_trigger:
-                    with m.Elif(trigger.trap):
+                    with m.Elif(self._trigger.trap):
                         m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(pc),
-                            exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
-                            exceptunit.m_exception.eq(1)
+                            self._exceptunit.enable.eq(1),
+                            self._exceptunit.edata.eq(pc),
+                            self._exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
+                            self._exceptunit.m_exception.eq(1)
                         ]
                         m.next = 'TRAP'
                 with m.Else():
-                    with m.If(decoder.is_shift | decoder.use_alu):
+                    with m.If(self._decoder.is_shift | self._decoder.use_alu):
                         m.next = 'COMMIT'
-                    with m.Elif(decoder.is_mul | decoder.is_div):
+                    with m.Elif(self._decoder.is_mul | self._decoder.is_div):
                         m.d.comb += multdiv.eq(1)
                         with m.If(mult_ack | div_ack):
                             m.next = 'COMMIT'
-                    with m.Elif(decoder.inst_fence | decoder.inst_fencei | decoder.inst_wfi):
+                    with m.Elif(self._decoder.inst_fence | self._decoder.inst_fencei | self._decoder.inst_wfi):
                         m.d.sync += pc.eq(pc4)
                         if self.enable_extra_csr:
-                            m.d.comb += exceptunit.w_retire.eq(1)
+                            m.d.comb += self._exceptunit.w_retire.eq(1)
                         m.next = 'FETCH'
-                    with m.Elif(decoder.is_ld | decoder.is_st | decoder.is_lrsc):
+                    with m.Elif(self._decoder.is_ld | self._decoder.is_st | self._decoder.is_lrsc):
                         m.next = 'MEMLS/LRSC'
                     if self.enable_rv32a:
-                        with m.Elif(decoder.is_amo):
+                        with m.Elif(self._decoder.is_amo):
                             m.next = 'AMO'
-                    with m.Elif(decoder.is_csr):
+                    with m.Elif(self._decoder.is_csr):
                         m.next = 'CSR'
                     with m.Else():
                         m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(instruction),
-                            exceptunit.ecode.eq(ExceptionCause.E_ILLEGAL_INST),
-                            exceptunit.m_exception.eq(~decoder.inst_mret),
-                            exceptunit.m_mret.eq(decoder.inst_mret)
+                            self._exceptunit.enable.eq(1),
+                            self._exceptunit.edata.eq(instruction),
+                            self._exceptunit.ecode.eq(ExceptionCause.E_ILLEGAL_INST),
+                            self._exceptunit.m_exception.eq(~self._decoder.inst_mret),
+                            self._exceptunit.m_mret.eq(self._decoder.inst_mret)
                         ]
-                        with m.If(decoder.inst_xcall):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_ECALL_FROM_M)  # check priviledge mode...
-                        with m.Elif(decoder.inst_xbreak):
+                        with m.If(self._decoder.inst_xcall):
+                            m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_ECALL_FROM_M)  # check priviledge mode...
+                        with m.Elif(self._decoder.inst_xbreak):
                             m.d.sync += [
-                                exceptunit.edata.eq(pc),
-                                exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT)
+                                self._exceptunit.edata.eq(pc),
+                                self._exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT)
                             ]
 
                         m.next = 'TRAP'
             with m.State('MEMLS/LRSC'):
                 m.d.comb += debug_state.eq(self.str2value('MEMLS/LRSC'))
-                is_ld = decoder.is_ld | decoder.inst_lr
-                is_st = decoder.is_st | decoder.inst_sc
+                is_ld = self._decoder.is_ld | self._decoder.inst_lr
+                is_st = self._decoder.is_st | self._decoder.inst_sc
 
                 valid = ~lrsc.sc_fail if self.enable_rv32a else 1
                 if self.enable_trigger:
-                    valid = valid & ~trigger.trap
+                    valid = valid & ~self._trigger.trap
                     m.d.comb += [
-                        trigger.x_valid.eq(1),
-                        trigger.x_load.eq(is_ld),
-                        trigger.x_store.eq(is_st),
+                        self._trigger.x_valid.eq(1),
+                        self._trigger.x_load.eq(is_ld),
+                        self._trigger.x_store.eq(is_st),
                     ]
                 if self.enable_rv32a:
                     m.d.comb += [
-                        lrsc.is_lr.eq(decoder.inst_lr),
-                        lrsc.is_sc.eq(decoder.inst_sc)
+                        lrsc.is_lr.eq(self._decoder.inst_lr),
+                        lrsc.is_sc.eq(self._decoder.inst_sc)
                     ]
 
                 # connect LSU
                 m.d.comb += [
-                    lsu.address.eq(add_out),
-                    lsu.store_data.eq(gprf_rp2.data),
-                    lsu.write.eq(is_st),
-                    lsu.cycle.eq(valid),
-                    lsu.strobe.eq(valid),
-                    lsu.op.eq(decoder.funct3)
+                    self._lsu.address.eq(add_out),
+                    self._lsu.store_data.eq(self._gprf_rp2.data),
+                    self._lsu.write.eq(is_st),
+                    self._lsu.cycle.eq(valid),
+                    self._lsu.strobe.eq(valid),
+                    self._lsu.op.eq(self._decoder.funct3)
                 ]
                 # Next state and extra logic
-                ready = lsu.ready | lrsc.sc_fail if self.enable_rv32a else lsu.ready
+                ready = self._lsu.ready | lrsc.sc_fail if self.enable_rv32a else self._lsu.ready
                 with m.If(ready):
-                    m.d.sync += ld_out.eq(lsu.load_data)
+                    m.d.sync += ld_out.eq(self._lsu.load_data)
                     if self.enable_rv32a:
                         m.d.comb += lrsc.cancel_reservation.eq(is_st)
-                        with m.If(decoder.inst_sc):
+                        with m.If(self._decoder.inst_sc):
                             m.d.sync += ld_out.eq(lrsc.sc_fail)
 
                     m.next = 'COMMIT'
-                with m.Elif(lsu.error | lsu.misaligned):
+                with m.Elif(self._lsu.error | self._lsu.misaligned):
                     m.d.sync += [
-                        exceptunit.enable.eq(1),
-                        exceptunit.edata.eq(add_out),
-                        exceptunit.m_exception.eq(1)
+                        self._exceptunit.enable.eq(1),
+                        self._exceptunit.edata.eq(add_out),
+                        self._exceptunit.m_exception.eq(1)
                     ]
-                    with m.If(is_ld & lsu.error):
-                        m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ACCESS_FAULT)
-                    with m.If(is_ld & lsu.misaligned):
-                        m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_LOAD_ADDR_MISALIGNED)
-                    with m.If(is_st & lsu.error):
-                        m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
-                    with m.If(is_st & lsu.misaligned):
-                        m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
+                    with m.If(is_ld & self._lsu.error):
+                        m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_LOAD_ACCESS_FAULT)
+                    with m.If(is_ld & self._lsu.misaligned):
+                        m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_LOAD_ADDR_MISALIGNED)
+                    with m.If(is_st & self._lsu.error):
+                        m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
+                    with m.If(is_st & self._lsu.misaligned):
+                        m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
 
                     m.next = 'TRAP'
                 if self.enable_trigger:
-                    with m.If(trigger.trap):
+                    with m.If(self._trigger.trap):
                         m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(pc),
-                            exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
-                            exceptunit.m_exception.eq(1)
+                            self._exceptunit.enable.eq(1),
+                            self._exceptunit.edata.eq(pc),
+                            self._exceptunit.ecode.eq(ExceptionCause.E_BREAKPOINT),
+                            self._exceptunit.m_exception.eq(1)
                         ]
                         m.next = 'TRAP'
             if self.enable_rv32a:
@@ -488,56 +495,56 @@ class Core(Elaboratable):
 
                     # connect LSU
                     m.d.comb += [
-                        lsu.address.eq(add_out),
-                        lsu.store_data.eq(amo_wdata),
-                        lsu.write.eq(amo_write),
-                        lsu.cycle.eq(1),
-                        lsu.strobe.eq(amo_strobe),
-                        lsu.op.eq(decoder.funct3)
+                        self._lsu.address.eq(add_out),
+                        self._lsu.store_data.eq(amo_wdata),
+                        self._lsu.write.eq(amo_write),
+                        self._lsu.cycle.eq(1),
+                        self._lsu.strobe.eq(amo_strobe),
+                        self._lsu.op.eq(self._decoder.funct3)
                     ]
                     with m.If(amo_done):
                         m.d.sync += ld_out.eq(amo_rdata)
                         m.d.comb += lrsc.cancel_reservation.eq(1)
 
                         m.next = 'COMMIT'
-                    with m.Elif(lsu.error | lsu.misaligned):
+                    with m.Elif(self._lsu.error | self._lsu.misaligned):
                         m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(add_out),
-                            exceptunit.m_exception.eq(1)
+                            self._exceptunit.enable.eq(1),
+                            self._exceptunit.edata.eq(add_out),
+                            self._exceptunit.m_exception.eq(1)
                         ]
-                        with m.If(lsu.error):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
-                        with m.If(lsu.misaligned):
-                            m.d.sync += exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
+                        with m.If(self._lsu.error):
+                            m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ACCESS_FAULT)
+                        with m.If(self._lsu.misaligned):
+                            m.d.sync += self._exceptunit.ecode.eq(ExceptionCause.E_STORE_AMO_ADDR_MISALIGNED)
 
                         m.next = 'TRAP'
             with m.State('CSR'):
                 m.d.comb += debug_state.eq(self.str2value('CSR'))
                 # CSR
                 m.d.comb += [
-                    csr.port.addr.eq(decoder.csr_addr),
-                    csr.port.dat_w.eq(csr_wdata),
-                    csr.port.we.eq(decoder.csr_we),
-                    csr.port.valid.eq(1)
+                    self._csr.port.addr.eq(self._decoder.csr_addr),
+                    self._csr.port.dat_w.eq(csr_wdata),
+                    self._csr.port.we.eq(self._decoder.csr_we),
+                    self._csr.port.valid.eq(1)
                 ]
-                with m.If(csr.port.ready):
-                    m.d.sync += csr_out.eq(csr.port.dat_r)
+                with m.If(self._csr.port.ready):
+                    m.d.sync += csr_out.eq(self._csr.port.dat_r)
 
                     m.next = 'COMMIT'
-                    with m.If(csr.invalid & decoder.is_csr):
+                    with m.If(self._csr.invalid & self._decoder.is_csr):
                         m.d.sync += [
-                            exceptunit.enable.eq(1),
-                            exceptunit.edata.eq(instruction),
-                            exceptunit.ecode.eq(ExceptionCause.E_ILLEGAL_INST),
-                            exceptunit.m_exception.eq(1)
+                            self._exceptunit.enable.eq(1),
+                            self._exceptunit.edata.eq(instruction),
+                            self._exceptunit.ecode.eq(ExceptionCause.E_ILLEGAL_INST),
+                            self._exceptunit.m_exception.eq(1)
                         ]
 
                         m.next = 'TRAP'
             with m.State('COMMIT'):
                 m.d.comb += debug_state.eq(self.str2value('COMMIT'))
 
-                with m.If(decoder.is_j | b_taken):
+                with m.If(self._decoder.is_j | b_taken):
                     with m.If(~jb_error):
                         m.d.sync += pc.eq(Cat(0, add_out[1:]))
                         if self.enable_rv32a:
@@ -545,70 +552,69 @@ class Core(Elaboratable):
                 with m.Else():
                     m.d.sync += pc.eq(pc4)
 
-                with m.If(decoder.gpr_rd.any()):
+                with m.If(self._decoder.gpr_rd.any()):
                     m.d.comb += [
-                        gprf_wp.addr.eq(decoder.gpr_rd),
-                        gprf_wp.en.eq(decoder.is_j | decoder.is_ld | decoder.is_csr | decoder.is_logic |
-                                      decoder.is_cmp | decoder.is_shift | decoder.is_add | decoder.is_mul |
-                                      decoder.is_div | decoder.is_amo | decoder.is_lrsc)
+                        self._gprf_wp.addr.eq(self._decoder.gpr_rd),
+                        self._gprf_wp.en.eq(self._decoder.is_j | self._decoder.is_ld | self._decoder.is_csr | self._decoder.is_logic |
+                                      self._decoder.is_cmp | self._decoder.is_shift | self._decoder.is_add | self._decoder.is_mul |
+                                      self._decoder.is_div | self._decoder.is_amo | self._decoder.is_lrsc)
                     ]
-
                 # BFMux
-                with m.If(decoder.is_j):
-                    m.d.comb += gprf_wp.data.eq(pc4)
-                with m.Elif(decoder.is_ld):
-                    m.d.comb += gprf_wp.data.eq(ld_out)
-                with m.Elif(decoder.is_csr):
-                    m.d.comb += gprf_wp.data.eq(csr_out)
-                with m.Elif(decoder.is_logic):
-                    m.d.comb += gprf_wp.data.eq(logic_out)
-                with m.Elif(decoder.is_cmp):
-                    m.d.comb += gprf_wp.data.eq(ltx_cmp_out)
-                with m.Elif(decoder.is_shift):
-                    m.d.comb += gprf_wp.data.eq(shift_out)
-                with m.Elif(decoder.is_mul):
-                    m.d.comb += gprf_wp.data.eq(mult_result)
-                with m.Elif(decoder.is_div):
-                    m.d.comb += gprf_wp.data.eq(div_result)
+                with m.If(self._decoder.is_j):
+                    m.d.comb += self._gprf_wp.data.eq(pc4)
+                with m.Elif(self._decoder.is_ld):
+                    m.d.comb += self._gprf_wp.data.eq(ld_out)
+                with m.Elif(self._decoder.is_csr):
+                    m.d.comb += self._gprf_wp.data.eq(csr_out)
+                with m.Elif(self._decoder.is_logic):
+                    m.d.comb += self._gprf_wp.data.eq(logic_out)
+                with m.Elif(self._decoder.is_cmp):
+                    m.d.comb += self._gprf_wp.data.eq(ltx_cmp_out)
+                with m.Elif(self._decoder.is_shift):
+                    m.d.comb += self._gprf_wp.data.eq(shift_out)
+                with m.Elif(self._decoder.is_mul):
+                    m.d.comb += self._gprf_wp.data.eq(mult_result)
+                with m.Elif(self._decoder.is_div):
+                    m.d.comb += self._gprf_wp.data.eq(div_result)
                 if self.enable_rv32a:
-                    with m.Elif(decoder.is_amo):
-                        m.d.comb += gprf_wp.data.eq(amo_rdata)
-                    with m.Elif(decoder.is_lrsc):
-                        m.d.comb += gprf_wp.data.eq(ld_out)
+                    with m.Elif(self._decoder.is_amo):
+                        m.d.comb += self._gprf_wp.data.eq(amo_rdata)
+                    with m.Elif(self._decoder.is_lrsc):
+                        m.d.comb += self._gprf_wp.data.eq(ld_out)
                 with m.Else():
-                    m.d.comb += gprf_wp.data.eq(add_out)
+                    m.d.comb += self._gprf_wp.data.eq(add_out)
 
                 m.next = 'FETCH'
                 with m.If(jb_error):
-                    m.d.comb += gprf_wp.en.eq(0)
+                    m.d.comb += self._gprf_wp.en.eq(0)
                     m.d.sync += [
-                        exceptunit.enable.eq(1),
-                        exceptunit.edata.eq(Cat(0, add_out[1:])),
-                        exceptunit.ecode.eq(ExceptionCause.E_INST_ADDR_MISALIGNED),
-                        exceptunit.m_exception.eq(1)
+                        self._exceptunit.enable.eq(1),
+                        self._exceptunit.edata.eq(Cat(0, add_out[1:])),
+                        self._exceptunit.ecode.eq(ExceptionCause.E_INST_ADDR_MISALIGNED),
+                        self._exceptunit.m_exception.eq(1)
                     ]
 
                     m.next = 'TRAP'
                 if self.enable_extra_csr:
                     with m.Else():
-                        m.d.comb += exceptunit.w_retire.eq(1)
+                        m.d.comb += self._exceptunit.w_retire.eq(1)
             with m.State('TRAP'):
                 m.d.comb += debug_state.eq(self.str2value('TRAP'))
                 if self.enable_rv32a:
                     m.d.comb += lrsc.cancel_reservation.eq(1)
 
-                with m.If(decoder.inst_mret):
-                    m.d.sync += pc.eq(exceptunit.mepc)
+                with m.If(self._decoder.inst_mret):
+                    m.d.sync += pc.eq(self._exceptunit.mepc)
                 with m.Else():
-                    m.d.sync += pc.eq(exceptunit.mtvec)
+                    m.d.sync += pc.eq(self._exceptunit.mtvec)
 
                 m.d.sync += [
-                    exceptunit.enable.eq(0),
-                    exceptunit.m_mret.eq(0),
-                    exceptunit.m_exception.eq(0)
+                    self._exceptunit.enable.eq(0),
+                    self._exceptunit.m_mret.eq(0),
+                    self._exceptunit.m_exception.eq(0)
                 ]
                 if self.enable_extra_csr:
-                    m.d.comb += exceptunit.w_retire.eq(1)
+                    m.d.comb += self._exceptunit.w_retire.eq(1)
                 m.next = 'FETCH'
         # ----------------------------------------------------------------------
         # New PC

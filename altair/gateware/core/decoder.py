@@ -135,7 +135,6 @@ class DecoderUnit(Elaboratable):
         uimm20      = Signal(20)
         jimm20      = Signal((21, True))
         itype       = Signal(Type)
-        instruction = self.instruction_f
 
         # Fields = list of (Opcode, F3, F7, F12)
         def match(op, f3=None, f5=None, f7=None, f12=None):
@@ -172,21 +171,21 @@ class DecoderUnit(Elaboratable):
                 m.d.comb += itype.eq(Type.I)
 
         m.d.comb += [
-            opcode.eq(instruction[:7]),
-            funct3.eq(instruction[12:15]),
-            funct5.eq(instruction[27:32]),
-            funct7.eq(instruction[25:32]),
-            funct12.eq(instruction[20:32]),
-            iimm12.eq(instruction[20:32]),
-            simm12.eq(Cat(instruction[7:12], instruction[25:32])),
-            bimm12.eq(Cat(0, instruction[8:12], instruction[25:31], instruction[7], instruction[31])),
-            uimm20.eq(instruction[12:32]),
-            jimm20.eq(Cat(0, instruction[21:31], instruction[20], instruction[12:20], instruction[31]))
+            opcode.eq(self.instruction_f[:7]),
+            funct3.eq(self.instruction_f[12:15]),
+            funct5.eq(self.instruction_f[27:32]),
+            funct7.eq(self.instruction_f[25:32]),
+            funct12.eq(self.instruction_f[20:32]),
+            iimm12.eq(self.instruction_f[20:32]),
+            simm12.eq(Cat(self.instruction_f[7:12], self.instruction_f[25:32])),
+            bimm12.eq(Cat(0, self.instruction_f[8:12], self.instruction_f[25:31], self.instruction_f[7], self.instruction_f[31])),
+            uimm20.eq(self.instruction_f[12:32]),
+            jimm20.eq(Cat(0, self.instruction_f[21:31], self.instruction_f[20], self.instruction_f[12:20], self.instruction_f[31]))
         ]
 
         m.d.comb += [
-            self.gpr_rs1.eq(instruction[15:20]),
-            self.gpr_rs2.eq(instruction[20:25]),
+            self.gpr_rs1.eq(self.instruction_f[15:20]),
+            self.gpr_rs2.eq(self.instruction_f[20:25]),
         ]
 
         with m.If(self.enable):
@@ -205,8 +204,8 @@ class DecoderUnit(Elaboratable):
             m.d.sync += [
                 self.funct3.eq(funct3),
                 self.gpr_rs1_q.eq(self.gpr_rs1),
-                self.gpr_rd.eq(instruction[7:12]),
-                self.csr_addr.eq(instruction[20:32]),
+                self.gpr_rd.eq(self.instruction_f[7:12]),
+                self.csr_addr.eq(self.instruction_f[20:32]),
                 self.csr_we.eq(~funct3[1] | self.gpr_rs1.any()),
 
                 self.is_imm.eq(match(op=Opcode.OP_IMM)),

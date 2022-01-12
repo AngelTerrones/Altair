@@ -77,8 +77,8 @@ class TriggerModule(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        triggers      = [Record.like(self.tdata1.read) for _ in range(self.ntriggers)]
-        triggers_data = [Record.like(self.tdata2.read) for _ in range(self.ntriggers)]
+        triggers      = [Record.like(self.tdata1.read, name=f'trigger_{idx}') for idx in range(self.ntriggers)]
+        triggers_data = [Record.like(self.tdata2.read, name=f'trigger_data_{idx}') for idx in range(self.ntriggers)]
 
         for t in triggers:
             m.d.comb += t.type.eq(TriggerType.MATCH)  # support only address/data match
@@ -98,7 +98,7 @@ class TriggerModule(Elaboratable):
                     ]
                     # handle writes to tdata1
                     with m.If(self.tdata1.update):
-                        mcontrol = Record([('i', mcontrol_layout), ('o', mcontrol_layout)])
+                        mcontrol = Record([('i', mcontrol_layout), ('o', mcontrol_layout)], name=f'mcontrol{idx}')
                         m.d.comb += [
                             mcontrol.i.eq(self.tdata1.write.data),  # casting
                             mcontrol.o.execute.eq(mcontrol.i.execute),
@@ -126,7 +126,7 @@ class TriggerModule(Elaboratable):
             with m.Switch(trigger.type):
                 with m.Case(TriggerType.MATCH):
                     match    = Signal()
-                    mcontrol = Record(mcontrol_layout)
+                    mcontrol = Record(mcontrol_layout, name=f'mcontrol{idx}')
                     m.d.comb += mcontrol.eq(trigger)  # casting, lol
 
                     pc_match  = ~(trigger_data ^ self.x_pc).any()

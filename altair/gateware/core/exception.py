@@ -21,13 +21,13 @@ class ExceptionUnit(Elaboratable, AutoCSR):
                  reset_address: int = 0x8000_0000
                  ) -> None:
         # ----------------------------------------------------------------------
-        self.hartid           = hartid
+        # Settings
         self.enable_user_mode = enable_user_mode
         self.enable_extra_csr = enable_extra_csr
-        self.enable_rv32m     = enable_rv32m
-        self.reset_address    = reset_address
+        self._interrupts      = PriorityEncoder(ExceptionCause.MAX_NUM)
         # ----------------------------------------------------------------------
-        if self.enable_extra_csr:
+        # Registers
+        if enable_extra_csr:
             self.misa      = csrf.add_register('misa', CSRIndex.MISA)
             self.mhartid   = csrf.add_register('mhartid', CSRIndex.MHARTID)
             self.mimpid    = csrf.add_register('mimpid', CSRIndex.MIMPID)
@@ -51,6 +51,7 @@ class ExceptionUnit(Elaboratable, AutoCSR):
         self.mtval    = csrf.add_register('mtval', CSRIndex.MTVAL)
         self.mip      = csrf.add_register('mip', CSRIndex.MIP)
         # ----------------------------------------------------------------------
+        # IO
         self.enable               = Signal()
         self.external_interrupt   = Signal()    # input
         self.software_interrupt   = Signal()    # input
@@ -62,34 +63,34 @@ class ExceptionUnit(Elaboratable, AutoCSR):
         self.m_exception          = Signal()    # input
         self.m_interrupt          = Signal()    # output
         self.m_privmode           = Signal(PrivMode)   # output
-        if self.enable_extra_csr:
+        if enable_extra_csr:
             self.w_retire = Signal()
+        # ----------------------------------------------------------------------
+        # Configurations
+        # Set MTVEC to the RESET address, to avoid getting lost in limbo if there's an exception
+        # before the boot code sets this to a valid value
+        self.mtvec.read.base.reset = reset_address >> 2
+        # MISA reset value
+        if enable_extra_csr:
+            misa_ext = (1 << (ord('i') - ord('a')))  # 32-bits processor. RV32I
+            if enable_rv32m:
+                misa_ext |= 1 << (ord('m') - ord('a'))  # RV32M
+            if enable_user_mode:
+                misa_ext |= 1 << (ord('u') - ord('a'))  # User mode enabled
+
+            self.misa.read.extensions.reset = misa_ext
+            self.misa.read.mxl.reset        = 0x1
+            self.mhartid.read.data.reset    = hartid
+
+        if enable_user_mode:
+            self.mstatus.read.mpp.reset = PrivMode.User
+        else:
+            self.mstatus.read.mpp.reset = PrivMode.Machine
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
         # --------------------------------------------------------------------------------
-        # Set MTVEC to the RESET address, to avoid getting lost in limbo if there's an exception
-        # before the boot code sets this to a valid value
-        self.mtvec.read.base.reset = self.reset_address >> 2
-
-        # MISA reset value
-        if self.enable_extra_csr:
-            misa_ext = (1 << (ord('i') - ord('a')))  # 32-bits processor. RV32I
-            if self.enable_rv32m:
-                misa_ext |= 1 << (ord('m') - ord('a'))  # RV32M
-            if self.enable_user_mode:
-                misa_ext |= 1 << (ord('u') - ord('a'))  # User mode enabled
-
-            self.misa.read.extensions.reset = misa_ext
-            self.misa.read.mxl.reset        = 0x1
-            self.mhartid.read.data.reset    = self.hartid
-
-        if self.enable_user_mode:
-            self.mstatus.read.mpp.reset = PrivMode.User
-        else:
-            self.mstatus.read.mpp.reset = PrivMode.Machine
-
         privmode = Signal(PrivMode, reset=PrivMode.Machine)
         m.d.comb += self.m_privmode.eq(privmode)
 
@@ -100,15 +101,15 @@ class ExceptionUnit(Elaboratable, AutoCSR):
                 m.d.sync += register.read.eq(register.write)
 
         # --------------------------------------------------------------------------------
-        interrupts = m.submodules.interrupts = PriorityEncoder(ExceptionCause.MAX_NUM)
+        m.submodules.interrupts = self._interrupts
         m.d.comb += [
-            interrupts.i[ExceptionCause.I_M_SOFTWARE].eq(self.mip.read.msip & self.mie.read.msie),
-            interrupts.i[ExceptionCause.I_M_TIMER].eq(self.mip.read.mtip & self.mie.read.mtie),
-            interrupts.i[ExceptionCause.I_M_EXTERNAL].eq(self.mip.read.meip & self.mie.read.meie),
+            self._interrupts.i[ExceptionCause.I_M_SOFTWARE].eq(self.mip.read.msip & self.mie.read.msie),
+            self._interrupts.i[ExceptionCause.I_M_TIMER].eq(self.mip.read.mtip & self.mie.read.mtie),
+            self._interrupts.i[ExceptionCause.I_M_EXTERNAL].eq(self.mip.read.meip & self.mie.read.meie),
         ]
 
         # interrupts are globally enable for less priviledge mode than Machine
-        m.d.comb += self.m_interrupt.eq(~interrupts.n & (self.mstatus.read.mie | (privmode != PrivMode.Machine)))
+        m.d.comb += self.m_interrupt.eq(~self._interrupts.n & (self.mstatus.read.mie | (privmode != PrivMode.Machine)))
 
         # --------------------------------------------------------------------------------
         m.d.sync += [
@@ -147,7 +148,7 @@ class ExceptionUnit(Elaboratable, AutoCSR):
                     ]
                 with m.Else():
                     m.d.sync += [
-                        self.mcause.read.ecode.eq(interrupts.o),
+                        self.mcause.read.ecode.eq(self._interrupts.o),
                         self.mcause.read.interrupt.eq(1)
                     ]
             with m.Elif(self.m_mret):

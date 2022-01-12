@@ -132,7 +132,7 @@ class CSRFile(Elaboratable):
                         # write
                         tmp = Record(register.write.layout)  # port.dat_w -> temp -> register
                         m.d.comb += tmp.eq(self.port.dat_w)
-                        for name, size, mode in reg_map[addr]:
+                        for name, _, mode in reg_map[addr]:
                             src = getattr(tmp, name)
                             dst = getattr(register.write, name)
                             if mode is CSRAccess.RW:
@@ -165,7 +165,7 @@ class CSRFile(Elaboratable):
                             # write
                             tmp = Record(register.write.layout)  # debug_port.dat_w -> temp -> register
                             m.d.comb += tmp.eq(self.debug_port.dat_w)
-                            for name, size, mode in reg_map[addr]:
+                            for name, _, mode in reg_map[addr]:
                                 src = getattr(tmp, name)
                                 dst = getattr(register.write, name)
                                 if mode in [CSRAccess.WLRL, CSRAccess.WARL]:

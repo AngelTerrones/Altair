@@ -35,7 +35,7 @@ class CoreInterrupts(Elaboratable):
         for idx, msip in enumerate(self._msip):
             self._mux.add(msip, addr=CoreInterrupts.BASE_MSIP + (CoreInterrupts.SIZE_MSIP * idx))
         for idx, mtimecmp in enumerate(self._mtimecmp):
-            self._mux.add(mtimecmp, addr=CoreInterrupts.BASE_MTIMECMP + (CoreInterrupts.BASE_MTIMECMP * idx))
+            self._mux.add(mtimecmp, addr=CoreInterrupts.BASE_MTIMECMP + (CoreInterrupts.SIZE_MTIMECMP * idx))
         self._mux.add(self._mtime, addr=CoreInterrupts.BASE_MTIME)
 
         self._bridge = WishboneCSRBridge(self._mux.bus, data_width=32)

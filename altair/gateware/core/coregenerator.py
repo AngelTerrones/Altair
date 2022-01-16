@@ -1,4 +1,3 @@
-from pyexpat import features
 from amaranth import Signal
 from amaranth import Module
 from amaranth import Elaboratable
@@ -8,6 +7,7 @@ from amaranth_soc.wishbone.bus import Decoder
 from amaranth_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
 from altair.gateware.platform.coreint import CoreInterrupts
+from altair.gateware.core.lrsc import LRSC
 from altair.gateware.platform.plic import PLIC
 from altair.gateware.platform.rom import ROM
 from altair.gateware.platform.xbar import XBAR
@@ -53,6 +53,8 @@ class CoreGenerator(Elaboratable):
         # ----------------------------------------------------------------------
         rom_img = generate_and_load(path=build_path, start=rom[0], target=mport[0], size=1 << rom[1])
         self._features = ['err']
+        if enable_rv32a:
+            self._features = ['err', 'lock']
         # Instantiate
         self._cores = [Core(reset_address=reset_address,
                             enable_rv32m=enable_rv32m,
@@ -96,20 +98,13 @@ class CoreGenerator(Elaboratable):
         m.submodules.plic    = self._plic
         # ------------------------------------------------------------
         # Connections
-        # CPU: connect TI, SI, EI, and snoop bus (TODO: rework the atomics...)
+        # CPU: connect TI, SI and EI
         for idx, core in enumerate(self._cores):
             m.d.comb += [
                 core.timer_interrupt.eq(self._coreint.timer_interrupt[idx]),
                 core.software_interrupt.eq(self._coreint.software_interrupt[idx]),
                 core.external_interrupt.eq(self._plic.core_interrupt[idx])
             ]
-            if hasattr(core, 'snoop'):
-                m.d.comb += [
-                    core.snoop.address.eq(self.mport.interface.adr),
-                    core.snoop.we.eq(self.mport.interface.we),
-                    core.snoop.valid.eq(self.mport.interface.cyc),
-                    core.snoop.ack.eq(self.mport.interface.ack)
-                ]
         # Connect slave ports. Ignore signals in the feature list
         m.d.comb += [
             self._coreint_port.interface.connect(self._coreint.wbport, exclude=self._features),
@@ -124,10 +119,16 @@ class CoreGenerator(Elaboratable):
         slaves  = [self.mport, self.io, self._coreint_port, self._plic_port, self._rom_port]
 
         if len(masters) == 1:
-            decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=['err'])
+            master  = masters[0]
+            decoder = m.submodules.decoder = Decoder(addr_width=30, data_width=32, granularity=8, features=self._features)
             for slave in slaves:
                 decoder.add(slave.interface, addr=slave.addr_start)
-            m.d.comb += masters[0].connect(decoder.bus)
+            m.d.comb += master.connect(decoder.bus)
+
+            # LRSC module
+            if 'lock' in self._features:
+                lrsc = m.submodules.lrsc = LRSC(1)
+                lrsc.tap_bus(m=m, idx=0, master=master, slave=decoder.bus)
         else:
             # crossbar
             m.submodules.xbar = XBAR(masters=masters, slaves=slaves, features=self._features)

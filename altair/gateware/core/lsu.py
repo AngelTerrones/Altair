@@ -72,11 +72,11 @@ class _DataFormat(Elaboratable):
 
 
 class LoadStoreUnit(Elaboratable):
-    def __init__(self) -> None:
+    def __init__(self, features) -> None:
         # submodules
         self._dataformat = _DataFormat()
         # IO
-        self.mport      = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='mport')
+        self.mport      = Interface(addr_width=30, data_width=32, granularity=8, features=features, name='mport')
         self.address    = Signal(32)
         self.store_data = Signal(32)
         self.load_data  = Signal(32)
@@ -87,6 +87,7 @@ class LoadStoreUnit(Elaboratable):
         self.ready      = Signal()
         self.error      = Signal()
         self.misaligned = Signal()
+        self.lrsc       = Signal()
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
@@ -111,5 +112,8 @@ class LoadStoreUnit(Elaboratable):
             self.error.eq(self.mport.err),
             self._dataformat.data_read.eq(self.mport.dat_r)
         ]
+
+        if hasattr(self.mport, 'lock'):
+            m.d.comb += self.mport.lock.eq(self.lrsc)
 
         return m

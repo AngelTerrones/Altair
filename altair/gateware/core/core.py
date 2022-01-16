@@ -16,7 +16,6 @@ from altair.gateware.core.exception import ExceptionUnit
 from altair.gateware.core.divider import Divider
 from altair.gateware.core.multiplier import Multiplier
 from altair.gateware.debug.trigger import TriggerModule
-from altair.gateware.core.lrsc import LRSC
 
 
 class Core(Elaboratable):
@@ -46,8 +45,9 @@ class Core(Elaboratable):
         self.enable_trigger    = enable_triggers
         self.trigger_ntriggers = ntriggers
         self.debug_enable      = debug_enable
+        features = ['err', 'lock'] if enable_rv32a else ['err']
         # Instantiate units
-        self._lsu        = LoadStoreUnit()
+        self._lsu        = LoadStoreUnit(features=features)
         self._decoder    = DecoderUnit(self.enable_rv32m, self.enable_rv32a)
         self._csr        = CSRFile()
         self._exceptunit = ExceptionUnit(csrf=self._csr,
@@ -69,20 +69,16 @@ class Core(Elaboratable):
                                           csrf=self._csr,
                                           enable_user_mode=self.enable_user_mode)
         # IO
-        self.wbport             = Interface(addr_width=30, data_width=32, granularity=8, features=['err'], name='wbport')
+        self.wbport             = Interface(addr_width=30, data_width=32, granularity=8, features=features, name='wbport')
         self.external_interrupt = Signal()  # input
         self.timer_interrupt    = Signal()  # input
         self.software_interrupt = Signal()  # input
-        if enable_rv32a:
-            self.snoop = LRSC.SnoopPort()
 
     def port_list(self) -> List:
         mport = [getattr(self.wbport, name) for name, _, _ in self.wbport.layout]
-        snoop = [] if self.enable_rv32a else [self.snoop]
 
         return [
             *mport,
-            *snoop,
             self.external_interrupt,
             self.timer_interrupt,
             self.software_interrupt
@@ -163,20 +159,6 @@ class Core(Elaboratable):
             m.d.comb += [
                 self._trigger.x_pc.eq(pc),
                 self._trigger.x_bus_addr.eq(add_out)
-            ]
-
-        if self.enable_rv32a:
-            lrsc = m.submodules.lrsc = LRSC()
-            m.d.comb += [
-                lrsc.snoop.address.eq(self.snoop.address),
-                lrsc.snoop.we.eq(self.snoop.we),
-                lrsc.snoop.valid.eq(self.snoop.valid),
-                lrsc.snoop.ack.eq(self.snoop.ack),
-
-                lrsc.internal.address.eq(self.wbport.adr),
-                lrsc.internal.we.eq(self.wbport.we),
-                lrsc.internal.valid.eq(self.wbport.cyc & self._decoder.is_lrsc),
-                lrsc.internal.ack.eq(self.wbport.ack),
             ]
 
         # Memory port
@@ -431,18 +413,13 @@ class Core(Elaboratable):
                 is_ld = self._decoder.is_ld | self._decoder.inst_lr
                 is_st = self._decoder.is_st | self._decoder.inst_sc
 
-                valid = ~lrsc.sc_fail if self.enable_rv32a else 1
+                valid = 1
                 if self.enable_trigger:
                     valid = valid & ~self._trigger.trap
                     m.d.comb += [
                         self._trigger.x_valid.eq(1),
                         self._trigger.x_load.eq(is_ld),
                         self._trigger.x_store.eq(is_st),
-                    ]
-                if self.enable_rv32a:
-                    m.d.comb += [
-                        lrsc.is_lr.eq(self._decoder.inst_lr),
-                        lrsc.is_sc.eq(self._decoder.inst_sc)
                     ]
 
                 # connect LSU
@@ -454,15 +431,12 @@ class Core(Elaboratable):
                     self._lsu.strobe.eq(valid),
                     self._lsu.op.eq(self._decoder.funct3)
                 ]
+                if self.enable_rv32a:
+                    m.d.comb += self._lsu.lrsc.eq(self._decoder.is_lrsc)
                 # Next state and extra logic
-                ready = self._lsu.ready | lrsc.sc_fail if self.enable_rv32a else self._lsu.ready
+                ready = self._lsu.ready
                 with m.If(ready):
                     m.d.sync += ld_out.eq(self._lsu.load_data)
-                    if self.enable_rv32a:
-                        m.d.comb += lrsc.cancel_reservation.eq(is_st)
-                        with m.If(self._decoder.inst_sc):
-                            m.d.sync += ld_out.eq(lrsc.sc_fail)
-
                     m.next = 'COMMIT'
                 with m.Elif(self._lsu.error | self._lsu.misaligned):
                     m.d.sync += [
@@ -504,7 +478,6 @@ class Core(Elaboratable):
                     ]
                     with m.If(amo_done):
                         m.d.sync += ld_out.eq(amo_rdata)
-                        m.d.comb += lrsc.cancel_reservation.eq(1)
 
                         m.next = 'COMMIT'
                     with m.Elif(self._lsu.error | self._lsu.misaligned):
@@ -547,8 +520,6 @@ class Core(Elaboratable):
                 with m.If(self._decoder.is_j | b_taken):
                     with m.If(~jb_error):
                         m.d.sync += pc.eq(Cat(0, add_out[1:]))
-                        if self.enable_rv32a:
-                            m.d.comb += lrsc.cancel_reservation.eq(1)
                 with m.Else():
                     m.d.sync += pc.eq(pc4)
 
@@ -600,8 +571,6 @@ class Core(Elaboratable):
                         m.d.comb += self._exceptunit.w_retire.eq(1)
             with m.State('TRAP'):
                 m.d.comb += debug_state.eq(self.str2value('TRAP'))
-                if self.enable_rv32a:
-                    m.d.comb += lrsc.cancel_reservation.eq(1)
 
                 with m.If(self._decoder.inst_mret):
                     m.d.sync += pc.eq(self._exceptunit.mepc)

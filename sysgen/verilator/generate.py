@@ -34,8 +34,9 @@ _define_h = '''#ifndef DEFINES_H
 '''
 
 
-def generate_testbench(config: Dict, path: str) -> None:
-    data_v = dict(RAM_ADDR=config['platform']['mport'][0],
+def generate_testbench(corename, config: Dict, path: str) -> None:
+    data_v = dict(CORENAME=corename,
+                  RAM_ADDR=config['platform']['mport'][0],
                   RAM_ADDR_WIDTH=config['platform']['mport'][1] - 2)  # byte to word
     data_h = dict(RAM_ADDR=config['platform']['mport'][0],
                   RAM_SIZE=1 << (config['platform']['mport'][1]))  # bytes

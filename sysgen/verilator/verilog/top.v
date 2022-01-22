@@ -34,7 +34,7 @@ module top (
 
     wire         unused;
 
-    altair_core cpu (// Outputs
+    $CORENAME cpu (// Outputs
                      .mport__adr         (mport__addr),
                      .mport__dat_w       (mport__dat_w),
                      .mport__sel         (mport__sel),

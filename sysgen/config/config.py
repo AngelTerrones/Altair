@@ -2,10 +2,6 @@ import os
 import yaml
 from typing import Dict
 
-logo = r'''-----------------------------------------------------
-    ALTAIR: A 32-bit RISC-V CPU based on Amaranth
------------------------------------------------------'''
-
 header = '''\033[0;32mConfiguration\033[0;0m
 Variant name: {variant}
 Config file: {configfile}

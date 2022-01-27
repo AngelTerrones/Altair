@@ -5,6 +5,14 @@
 #include "coretb.h"
 #include "defines.h"
 
+#define ADDR   io___05Faddr
+#define DAT_W  io___05Fdat_w
+#define CYC    io___05Fcyc
+#define ACK    io___05Fack
+
+#define STDIO_OFFSET     0x1000
+#define INTERRUPT_OFFSET 0x2000
+
 static std::atomic_bool quit(false);
 
 // -----------------------------------------------------------------------------
@@ -18,9 +26,20 @@ void intHandler(int signo){
 CORETB::CORETB() : Testbench(TBFREQ, TBTS), m_exitCode(-1) {
 }
 // -----------------------------------------------------------------------------
-int CORETB::SimulateCore(const std::string &progfile, const unsigned long max_time, const std::string &s_signature) {
+int CORETB::SimulateCore(const std::string &progfile,
+                         const unsigned long max_time,
+                         const std::string &s_signature,
+                         const unsigned long io_base_addr,
+                         const unsigned long io_bit_size) {
         bool ok        = false;
         bool notimeout = max_time == 0;
+        // Init I/O "devices"
+        uint32_t io_mask = ((1 << io_bit_size) - 1);
+        m_stdout_addr    = ((io_base_addr + STDIO_OFFSET) >> 2) & io_mask;
+        m_interrupt_addr = ((io_base_addr + INTERRUPT_OFFSET) >> 2) & io_mask;
+        m_buffer.reserve(256);
+        std::fill(m_buffer.begin(), m_buffer.end(), 0);  // fill with zeros first, then clear
+        m_buffer.clear();
 
         // -------------------------------------------------------------
         // Add trap handler to catch [Ctrl + C]
@@ -45,6 +64,7 @@ int CORETB::SimulateCore(const std::string &progfile, const unsigned long max_ti
 
         while ((getTime() <= max_time || notimeout) && !Verilated::gotFinish() && !quit) {
                 Tick();
+                check_bus();
                 if (CheckTOHOST(ok))
                         break;
         }
@@ -95,4 +115,37 @@ void CORETB::DumpSignature(const std::string &signature) {
                 fprintf(fp, "%08x\n", ram_v_dpi_read_word(idx));
         }
         fclose(fp);
+}
+// -----------------------------------------------------------------------------
+void CORETB::check_bus() {
+        if (!m_top->CYC) return;
+
+        if (!m_top->ACK){
+                if (m_top->ADDR == m_stdout_addr) {
+                        _stdout();
+                } else if (m_top->ADDR == m_interrupt_addr) {
+                        _interrupts();
+                }
+        } else {
+                m_top->ACK = 0;
+        }
+}
+// -----------------------------------------------------------------------------
+void CORETB::_stdout() {
+        char dat = m_top->DAT_W & 0xff;
+        m_top->ACK = 1;
+        // flush buffer?
+        if ((m_buffer.size() == m_buffer.capacity()) || dat == '\n') {
+                printf("%s%c", m_buffer.data(), dat);
+                std::fill(m_buffer.begin(), m_buffer.end(), 0);
+                m_buffer.clear();
+                fflush(stdout);
+        } else {
+                m_buffer.push_back(dat);
+        }
+}
+// -----------------------------------------------------------------------------
+void CORETB::_interrupts() {
+        m_top->interrupts = m_top->DAT_W;
+        m_top->ACK = 1;
 }

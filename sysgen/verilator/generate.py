@@ -35,11 +35,13 @@ _define_h = '''#ifndef DEFINES_H
 
 
 def generate_testbench(corename, config: Dict, path: str) -> None:
+    addr = config['platform']['mport'][0]
+    size = config['platform']['mport'][1]
     data_v = dict(CORENAME=corename,
-                  RAM_ADDR=config['platform']['mport'][0],
-                  RAM_ADDR_WIDTH=config['platform']['mport'][1] - 2)  # byte to word
-    data_h = dict(RAM_ADDR=config['platform']['mport'][0],
-                  RAM_SIZE=1 << (config['platform']['mport'][1]))  # bytes
+                  RAM_ADDR=f"32'h{addr:08x}",
+                  RAM_ADDR_WIDTH=size - 2)  # byte to word
+    data_h = dict(RAM_ADDR=f"{addr:#010x}",
+                  RAM_SIZE=1 << size)  # bytes
     # top.v
     with open(top_template, 'r') as f:
         template = Template(f.read())

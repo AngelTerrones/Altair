@@ -7,7 +7,7 @@
 module top (
     input wire         clk,
     input wire         rst,
-    output wire [5:0]  io__addr,
+    output wire [31:0]  io__addr,
     output wire [31:0] io__dat_w,
     output wire [3:0]  io__sel,
     output wire        io__we,

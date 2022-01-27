@@ -16,7 +16,7 @@ module top (
     input wire [31:0]  io__dat_r,
     input wire         io__ack,
     input wire         io__err,
-    input wire [7:0]   interrupts
+    input wire [32:0]  interrupts
     );
     //--------------------------------------------------------------------------
     localparam       BASE_ADDR  = $RAM_ADDR;

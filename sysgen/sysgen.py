@@ -21,12 +21,11 @@ class Sysgen:
         self.heading  = heading
 
     def need_rebuild(self, bfolder: str):
-        root  = os.path.dirname(os.path.abspath(__file__))
-        files = glob.glob(f'{root}/{self.corename}/gateware/**/*.py', recursive=True)
         if not os.path.exists(f'{bfolder}/{self.corename}_core.v'):
             return True
         ref   = os.stat(f'{bfolder}/{self.corename}_core.v').st_mtime_ns
-
+        root  = os.path.dirname(os.path.abspath(__file__))
+        files = glob.glob(f'{root}/{self.corename}/gateware/**/*.py', recursive=True)
         for file in files:
             tmp = os.stat(file).st_mtime_ns
             if tmp > ref:
@@ -66,21 +65,17 @@ class Sysgen:
             path = f'build/{variant}'
 
             # check if the testbench has been built
-            if (os.path.exists(f'{path}/core.exe') and not self.need_rebuild(path)):
-                result[variant] = True
-                print(f'Build of [{variant}] up-to-date. Skipping.')
-                continue
+            if (self.need_rebuild(path)):
+                # generate verilog
+                os.makedirs(path, exist_ok=True)
+                print(f'\n\033[1;34mGenerating file for the [{variant}] configuration\033[1;0m')
+                core_config = load_config(variant, args.config, args.verbose)
+                self.CPU_to_verilog(core_config, path, f'{self.corename}_core.v')
 
-            # generate verilog
-            os.makedirs(path, exist_ok=True)
-            print(f'\n\033[1;34mGenerating file for the [{variant}] configuration\033[1;0m')
-            core_config = load_config(variant, args.config, args.verbose)
-            self.CPU_to_verilog(core_config, path, f'{self.corename}_core.v')
-
-            # generate testbench and makefile
-            print(f'\033[0;32mGenerating top file and makefile\033[0;0m')
-            generate_testbench(f'{self.corename}_core', core_config, path)
-            generate_makefile(path)
+                # generate testbench and makefile
+                print(f'\033[0;32mGenerating top file and makefile\033[0;0m')
+                generate_testbench(f'{self.corename}_core', core_config, path)
+                generate_makefile(path)
 
             # get the config file
             if variant == 'custom':

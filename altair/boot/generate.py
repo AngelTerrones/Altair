@@ -26,9 +26,9 @@ SECTIONS {
 '''
 
 _makefile = '''RISCV_PREFIX  ?= riscv64-unknown-elf-
-RISCV_GCC     := $(RVGCC_PATH)$(RISCV_PREFIX)gcc
-RISCV_OBJCOPY := $(RVGCC_PATH)$(RISCV_PREFIX)objcopy
-RISCV_OBJDUMP := $(RVGCC_PATH)$(RISCV_PREFIX)objdump
+RISCV_GCC     := $(RVGCC_PATH)/$(RISCV_PREFIX)gcc
+RISCV_OBJCOPY := $(RVGCC_PATH)/$(RISCV_PREFIX)objcopy
+RISCV_OBJDUMP := $(RVGCC_PATH)/$(RISCV_PREFIX)objdump
 
 CFLAGS = -march=rv32i -mabi=ilp32 -O3 -Wl,--no-relax
 LFLAGS = -nostdlib -nostartfiles -mcmodel=medany -T linker.ld

@@ -7,15 +7,15 @@ import subprocess
 from subprocess import CalledProcessError
 from amaranth.back import verilog
 from amaranth.hdl.ir import Fragment
-from altair.gateware.core import CoreGenerator
-from sysgen.config.config import load_config
-from sysgen.config.config import cpu_variants
-from sysgen.config.config import config_files
-from sysgen.verilator.generate import generate_makefile
-from sysgen.verilator.generate import generate_testbench
+from altair.gateware import CoreGenerator
+from sysgen.config import load_config
+from sysgen.config import cpu_variants
+from sysgen.config import config_files
+from sysgen.verilator import generate_makefile
+from sysgen.verilator import generate_testbench
 
 
-class Sysgen:
+class SystemGenerator:
     def __init__(self, corename, heading) -> None:
         self.corename = corename
         self.heading  = heading
@@ -33,7 +33,6 @@ class Sysgen:
 
         return False
 
-
     def CPU_to_verilog(self, core_config: dict, path: str, vfile: str):
         core_args     = core_config['core']
         platform_args = core_config['platform']
@@ -50,13 +49,11 @@ class Sysgen:
         except EnvironmentError as error:
             print(f"Error: {error}. Check if the output path exists.", file=sys.stderr)
 
-
     def generate_cpu_verilog(self, args):
         # load configuration
         core_config = load_config(args.variant, args.config, args.verbose)
         path, filename = os.path.split(args.filename)
         self.CPU_to_verilog(core_config, path, filename)
-
 
     def build_testbench(self, args):
         result = dict()
@@ -108,7 +105,6 @@ class Sysgen:
 
         return result
 
-
     def run_compliance(self, args):
         # build the testbench
         tb_results = self.build_testbench(args)
@@ -157,7 +153,6 @@ class Sysgen:
                 print(f'\t{tmp}')
 
         print('\nPlease, check logs at build/<variant> in case of errors')
-
 
     def run(self) -> None:
         class custom_formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):

@@ -6,11 +6,11 @@ from amaranth_soc.memory import MemoryMap
 from amaranth_soc.wishbone.bus import Decoder
 from amaranth_soc.wishbone.bus import Interface
 from altair.gateware.core import Core
-from altair.gateware.platform.coreint import CoreInterrupts
-from altair.gateware.core.lrsc import LRSC
-from altair.gateware.platform.plic import PLIC
-from altair.gateware.platform.rom import ROM
-from altair.gateware.platform.xbar import XBAR
+from altair.gateware.core import LRSC
+from altair.gateware.platform import CoreInterrupts
+from altair.gateware.platform import PLIC
+from altair.gateware.platform import ROM
+from altair.gateware.platform import XBAR
 from altair.boot.generate import generate_and_load
 from typing import List
 

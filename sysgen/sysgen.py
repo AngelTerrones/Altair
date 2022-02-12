@@ -25,7 +25,7 @@ class Sysgen:
             return True
         ref   = os.stat(f'{bfolder}/{self.corename}_core.v').st_mtime_ns
         root  = os.path.dirname(os.path.abspath(__file__))
-        files = glob.glob(f'{root}/{self.corename}/gateware/**/*.py', recursive=True)
+        files = glob.glob(f'{root}/../{self.corename}/gateware/**/*.py', recursive=True)
         for file in files:
             tmp = os.stat(file).st_mtime_ns
             if tmp > ref:

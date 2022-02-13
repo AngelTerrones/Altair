@@ -1,0 +1,23 @@
+{
+    core: {
+        reset_address: 0x0100_0000,
+        #ISA
+        enable_rv32m: True,
+        enable_rv32a: True,
+        enable_extra_csr: True,
+        enable_user_mode: True,
+        # Debug
+        debug_enable: False,
+        enable_triggers: False,
+        ntriggers: 4
+    },
+    platform: {
+        ncores: 1,
+        coreint_address: 0x1000_0000,
+        plic_address: 0x2000_0000,
+        plic_nint: 8,
+        rom: [0x0100_0000, 8],
+        mport: [0x8000_0000, 20],
+        io: [0x4000_0000, 28]
+    }
+}

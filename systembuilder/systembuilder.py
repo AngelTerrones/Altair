@@ -8,14 +8,14 @@ from subprocess import CalledProcessError
 from amaranth.back import verilog
 from amaranth.hdl.ir import Fragment
 from altair.gateware import CoreGenerator
-from sysgen.config import load_config
-from sysgen.config import cpu_variants
-from sysgen.config import config_files
-from sysgen.verilator import generate_makefile
-from sysgen.verilator import generate_testbench
+from systembuilder.config import load_config
+from systembuilder.config import cpu_variants
+from systembuilder.config import config_files
+from systembuilder.verilator import generate_makefile
+from systembuilder.verilator import generate_testbench
 
 
-class SystemGenerator:
+class SystemBuilder:
     def __init__(self, corename, heading) -> None:
         self.corename = corename
         self.heading  = heading
@@ -33,7 +33,7 @@ class SystemGenerator:
 
         return False
 
-    def CPU_to_verilog(self, core_config: dict, path: str, vfile: str):
+    def core_to_verilog(self, core_config: dict, path: str, vfile: str):
         core_args     = core_config['core']
         platform_args = core_config['platform']
         cpu           = CoreGenerator(**core_args, **platform_args, build_path=path)
@@ -53,7 +53,7 @@ class SystemGenerator:
         # load configuration
         core_config = load_config(args.variant, args.config, args.verbose)
         path, filename = os.path.split(args.filename)
-        self.CPU_to_verilog(core_config, path, filename)
+        self.core_to_verilog(core_config, path, filename)
 
     def build_testbench(self, args):
         result = dict()
@@ -67,7 +67,7 @@ class SystemGenerator:
                 os.makedirs(path, exist_ok=True)
                 print(f'\n\033[1;34mGenerating file for the [{variant}] configuration\033[1;0m')
                 core_config = load_config(variant, args.config, args.verbose)
-                self.CPU_to_verilog(core_config, path, f'{self.corename}_core.v')
+                self.core_to_verilog(core_config, path, f'{self.corename}_core.v')
 
                 # generate testbench and makefile
                 print(f'\033[0;32mGenerating top file and makefile\033[0;0m')

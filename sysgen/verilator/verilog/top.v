@@ -32,8 +32,6 @@ module top (
     wire                     mport__ack;
     wire                     mport__err;
 
-    wire         unused;
-
     $CORENAME cpu (// Outputs
                      .mport__adr         (mport__addr),
                      .mport__dat_w       (mport__dat_w),

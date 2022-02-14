@@ -15,7 +15,7 @@ from altair.gateware.core.decoder import DecoderUnit
 from altair.gateware.core.exception import ExceptionUnit
 from altair.gateware.core.divider import Divider
 from altair.gateware.core.multiplier import Multiplier
-from altair.gateware.debug.trigger import TriggerModule
+from altair.gateware.debug import TriggerModule
 
 
 class Core(Elaboratable):

@@ -36,13 +36,13 @@ dmi_layout = [
 
 # DMI: Debug interface (bus)
 dmi_bus_layout = [
-    ('addr',   7),
-    ('data_w', 32),
-    ('wen',    1),
-    ('valid',  1),
-    ('data_r', 32),
-    ('ack',    1),
-    ('err',    1),
+    ('addr',   7,  DIR_FANOUT),
+    ('data_w', 32, DIR_FANOUT),
+    ('wen',    1,  DIR_FANOUT),
+    ('valid',  1,  DIR_FANOUT),
+    ('data_r', 32, DIR_FANIN),
+    ('ack',    1,  DIR_FANIN),
+    ('err',    1,  DIR_FANIN),
 ]
 
 # DM: Debug Module

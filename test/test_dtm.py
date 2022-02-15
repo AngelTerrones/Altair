@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os
 import pytest
 from amaranth import Cat
@@ -8,7 +6,6 @@ from amaranth import Module
 from amaranth import ClockDomain
 from amaranth.sim import Simulator
 from amaranth.sim import Delay
-import vcd
 from altair.gateware.debug.dtm import DTM
 from altair.gateware.debug.layout import DmiOp
 from altair.gateware.debug.layout import JTAGReg
@@ -25,7 +22,6 @@ def jtag_cd():
 @pytest.fixture
 def module(dtm, jtag_cd):
     m    = Module()
-    m.domain
     sync = ClockDomain('sync', clk_edge='pos')
     m.domains += [jtag_cd, sync]
     m.submodules.dtm = dtm

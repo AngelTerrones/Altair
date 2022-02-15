@@ -45,3 +45,6 @@ Debug.md
 
 .directory
 .vim/
+
+# pytest
+.pytest_cache

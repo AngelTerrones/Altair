@@ -42,7 +42,7 @@ def load_config(variant: str, configfile: str, verbose: bool = True) -> Dict:
     core_config = yaml.load(open(configfile).read(), Loader=yaml.Loader)
 
     if verbose:
-        print(header.format(logo=logo, variant=variant, configfile=configfile))
+        print(header.format(variant=variant, configfile=configfile))
         print_dict(core_config)
 
     return core_config
